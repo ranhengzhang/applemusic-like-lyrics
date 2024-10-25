@@ -140,16 +140,19 @@ impl AudioPlayer {
             unsafe {
                 info!("支持编解码器：");
                 let mut ptr = core::ptr::null_mut();
+                let mut codecs = String::with_capacity(2048);
                 while let Some(codec) = ffmpeg_next::sys::av_codec_iterate(&mut ptr).as_ref() {
                     let name = core::ffi::CStr::from_ptr(codec.name);
-                    info!(" - {}", name.to_string_lossy());
+                    codecs.push_str(name.to_string_lossy().as_ref());
+                    codecs.push(' ');
                 }
+                info!("  {codecs}");
             }
         }
 
         let (evt_sender, evt_receiver) = tokio::sync::mpsc::unbounded_channel();
         let (msg_sender, msg_receiver) = tokio::sync::mpsc::unbounded_channel();
-        let playlist = Vec::<SongData>::with_capacity(4096);
+        let playlist = Vec::<SongData>::with_capacity(8192);
         let fft_player = Arc::new(Mutex::new(FFTPlayer::new()));
         let fft_player_clone = fft_player.clone();
         let (fft_has_data_sx, mut fft_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -458,7 +461,7 @@ impl AudioPlayer {
 
                         self.is_playing = true;
                         info!("播放上一首歌曲！");
-                        self.recreate_play_task();
+                        self.recreate_play_task(true).await?;
                     }
 
                     emitter.ret_none(msg).await?;
@@ -472,7 +475,21 @@ impl AudioPlayer {
                             (self.current_play_index + 1) % self.playlist.len();
                         self.current_song = self.playlist.get(self.current_play_index).cloned();
                         info!("播放下一首歌曲！");
-                        self.recreate_play_task();
+                        self.recreate_play_task(true).await?;
+                    }
+
+                    emitter.ret_none(msg).await?;
+                }
+                AudioThreadMessage::NextSongGapless { .. } => {
+                    self.is_playing = true;
+                    if self.playlist.is_empty() {
+                        warn!("无法播放歌曲，尚未设置播放列表！");
+                    } else {
+                        self.current_play_index =
+                            (self.current_play_index + 1) % self.playlist.len();
+                        self.current_song = self.playlist.get(self.current_play_index).cloned();
+                        info!("播放下一首歌曲！");
+                        self.recreate_play_task(false).await?;
                     }
 
                     emitter.ret_none(msg).await?;
@@ -485,7 +502,7 @@ impl AudioPlayer {
                         self.current_play_index = *song_index;
                         self.current_song = self.playlist.get(self.current_play_index).cloned();
                         info!("播放第 {} 首歌曲！", *song_index + 1);
-                        self.recreate_play_task();
+                        self.recreate_play_task(true).await?;
                     }
 
                     emitter.ret_none(msg).await?;
@@ -591,9 +608,13 @@ impl AudioPlayer {
         })
     }
 
-    pub fn recreate_play_task(&mut self) {
+    pub async fn recreate_play_task(&mut self, clear_output_buffer: bool) -> anyhow::Result<()> {
         if let Some(task) = self.current_play_task_handle.take() {
             task.abort();
+        }
+        if clear_output_buffer {
+            self.player.clear_buffer().await?;
+            self.player.wait_empty().await;
         }
         if let Some(current_song) = self.current_song.clone() {
             let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
@@ -616,6 +637,7 @@ impl AudioPlayer {
         } else {
             warn!("当前没有歌曲可以播放！");
         }
+        Ok(())
     }
 
     async fn play_audio(
@@ -699,7 +721,9 @@ impl AudioPlayer {
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
 
-        handler.send_anonymous(AudioThreadMessage::NextSong).await?;
+        handler
+            .send_anonymous(AudioThreadMessage::NextSongGapless)
+            .await?;
 
         Ok(())
     }
@@ -734,116 +758,231 @@ impl AudioPlayer {
         current_play_index: usize,
         file_path: impl AsRef<std::path::Path> + std::fmt::Debug + Send + Sync + 'static,
     ) -> anyhow::Result<()> {
-        use symphonia::core::audio::{AsAudioBufferRef, AudioBuffer, Channels, Signal, SignalSpec};
+        use symphonia::core::audio::{AsAudioBufferRef, AudioBuffer, Signal, SignalSpec};
 
-        let info = crate::utils::read_audio_info_ffmpeg(&file_path);
+        let new_audio_info = crate::utils::read_audio_info_ffmpeg(&file_path);
 
-        info!("音频元数据信息：{info:#?}");
+        info!("音频元数据信息：{new_audio_info:#?}");
 
-        tokio::runtime::Handle::current()
-            .spawn_blocking(move || -> anyhow::Result<()> {
-                let handle = tokio::runtime::Handle::current();
-                let mut ictx =
-                    ffmpeg_next::format::input(&file_path).context("无法通过 FFMPEG 打开音频流")?;
+        let mut ictx =
+            ffmpeg_next::format::input(&file_path).context("无法通过 FFMPEG 打开音频流")?;
 
-                let audio_stream = ictx
-                    .streams()
-                    .best(ffmpeg_next::media::Type::Audio)
-                    .context("无法在媒体文件中找到合适的音频流")?;
-                let audio_stream_index = audio_stream.index();
-                let codec = ffmpeg_next::codec::Context::from_parameters(audio_stream.parameters())
-                    .context("从参数创建音频解码器失败")?;
-                let mut dec = codec.decoder().audio().context("创建音频解码器失败")?;
+        let (audio_stream_index, audio_time_base, mut dec) = {
+            let audio_stream = ictx
+                .streams()
+                .best(ffmpeg_next::media::Type::Audio)
+                .context("无法在媒体文件中找到合适的音频流")?;
+            let codec = ffmpeg_next::codec::Context::from_parameters(audio_stream.parameters())
+                .context("从参数创建音频解码器失败")?;
+            let dec = codec.decoder().audio().context("创建音频解码器失败")?;
+            (audio_stream.index(), audio_stream.time_base(), dec)
+        };
 
-                dec.set_packet_time_base(audio_stream.time_base());
-                let mut frame = ffmpeg_next::frame::Audio::empty();
+        dec.set_packet_time_base(audio_time_base);
+        let audio_time_base = f64::from(audio_time_base);
+        let mut frame = ffmpeg_next::frame::Audio::empty();
 
-                for (st, p) in ictx.packets() {
-                    if st.index() == audio_stream_index {
-                        use ffmpeg_next::util::format::Sample;
-                        if let Err(err) = dec.send_packet(&p) {
-                            warn!("解码音频数据包失败，正在尝试跳过：{err}");
-                            continue;
+        let mut current_audio_info = ctx.current_audio_info.write().await;
+        *current_audio_info = new_audio_info.clone();
+        drop(current_audio_info);
+
+        // TODO: 解析音质信息
+        let audio_quality = AudioQuality::default();
+        if let Some(x) = &ctx.media_state_manager {
+            let _ = x.set_title(&new_audio_info.name);
+            let _ = x.set_artist(&new_audio_info.artist);
+            if let Some(cover) = &new_audio_info.cover {
+                let _ = x.set_cover_image(cover);
+            } else {
+                let _ = x.set_cover_image([]);
+            }
+            let _ = x.set_playing(true);
+            let _ = x.set_duration(new_audio_info.duration);
+            let _ = x.set_position(0.0);
+            let _ = x.update();
+        }
+        ctx.emitter
+            .emit(AudioThreadEvent::LoadAudio {
+                music_id: music_id.clone(),
+                music_info: new_audio_info,
+                quality: audio_quality.to_owned(),
+                current_play_index,
+            })
+            .await?;
+        ctx.emitter
+            .emit(AudioThreadEvent::PlayStatus { is_playing: true })
+            .await?;
+
+        let mut is_playing = true;
+        let mut last_play_pos = 0.0;
+        ctx.play_pos_sx.send(Some((false, last_play_pos))).unwrap();
+        'decode_loop: for (st, p) in ictx.packets() {
+            if is_playing {
+                // TODO: 合并冗余代码
+                if let Some(x) = &ctx.media_state_manager {
+                    let _ = x.set_position(last_play_pos);
+                    let _ = x.update();
+                }
+                'recv_loop: loop {
+                    match ctx.play_rx.try_recv() {
+                        Ok(msg) => match msg {
+                            AudioThreadMessage::SeekAudio { position, .. } => {
+                                // let _ = ictx.seek((position / audio_time_base) as _, ..);
+                                ctx.play_pos_sx.send(Some((false, position))).unwrap();
+                                ctx.current_audio_info.write().await.position = position;
+                            }
+                            AudioThreadMessage::PauseAudio { .. } => {
+                                is_playing = false;
+                                ctx.play_pos_sx.send(Some((false, last_play_pos))).unwrap();
+                                continue 'decode_loop;
+                            }
+                            _ => {}
+                        },
+                        Err(TryRecvError::Disconnected) => {
+                            anyhow::bail!("已断开音频线程通道");
                         }
-                        if let Err(err) = dec.receive_frame(&mut frame) {
-                            warn!("接收音频数据包失败: {err}");
-                            continue;
-                        }
-
-                        // AudioBuffer::new(10, SignalSpec::new(rate, channels));
-                        let format = frame.format();
-                        fn make_audio_buf<
-                            T: symphonia::core::sample::Sample + ffmpeg_next::frame::audio::Sample,
-                        >(
-                            frame: &ffmpeg_next::frame::Audio,
-                        ) -> anyhow::Result<AudioBuffer<T>> {
-                            let channel_layout = {
-                                let channel_layout = dbg!(frame.channel_layout());
-                                if channel_layout == ffmpeg_next::ChannelLayout::MONO {
-                                    symphonia::core::audio::Layout::Mono
-                                } else if channel_layout == ffmpeg_next::ChannelLayout::STEREO {
-                                    symphonia::core::audio::Layout::Stereo
-                                } else if channel_layout == ffmpeg_next::ChannelLayout::_2POINT1 {
-                                    symphonia::core::audio::Layout::TwoPointOne
-                                } else if channel_layout == ffmpeg_next::ChannelLayout::_5POINT1 {
-                                    symphonia::core::audio::Layout::FivePointOne
-                                } else {
-                                    anyhow::bail!("不支持的声道数据包")
-                                }
-                            };
-                            let mut abuf = AudioBuffer::<T>::new(
-                                frame.samples() as u64,
-                                SignalSpec::new_with_layout(frame.rate(), channel_layout),
-                            );
-                            abuf.render_reserved(Some(frame.samples()));
-                            assert_eq!(abuf.capacity(), frame.samples());
-                            let nb_chan = frame.planes();
-                            for i in 0..nb_chan {
-                                let chan = abuf.chan_mut(i);
-                                chan.copy_from_slice(frame.plane(i));
-                            }
-                            Ok(abuf)
-                        }
-
-                        match format {
-                            Sample::U8(_) => {
-                                let abuf = make_audio_buf::<u8>(&frame)?;
-                                handle
-                                    .block_on(ctx.audio_tx.write_ref(0, abuf.as_audio_buffer_ref()))
-                            }
-                            Sample::I16(_) => {
-                                let abuf = make_audio_buf::<i16>(&frame)?;
-                                handle
-                                    .block_on(ctx.audio_tx.write_ref(0, abuf.as_audio_buffer_ref()))
-                            }
-                            Sample::I32(_) => {
-                                let abuf = make_audio_buf::<i32>(&frame)?;
-                                handle
-                                    .block_on(ctx.audio_tx.write_ref(0, abuf.as_audio_buffer_ref()))
-                            }
-                            Sample::I64(_) => {
-                                warn!("不支持 I64 采样类型");
-                                Ok(())
-                            }
-                            Sample::F32(_) => {
-                                let abuf = make_audio_buf::<f32>(&frame)?;
-                                handle
-                                    .block_on(ctx.audio_tx.write_ref(0, abuf.as_audio_buffer_ref()))
-                            }
-                            Sample::F64(_) => {
-                                let abuf = make_audio_buf::<f64>(&frame)?;
-                                handle
-                                    .block_on(ctx.audio_tx.write_ref(0, abuf.as_audio_buffer_ref()))
-                            }
-                            _ => Ok(()),
-                        }
-                        .context("将音频包写入音频输出时发生错误")?;
+                        Err(TryRecvError::Empty) => break 'recv_loop,
                     }
                 }
 
-                Ok(())
-            })
-            .await??;
+                if st.index() == audio_stream_index {
+                    use ffmpeg_next::util::format::Sample;
+                    if let Err(err) = dec.send_packet(&p) {
+                        warn!("解码音频数据包失败，正在尝试跳过：{err}");
+                        continue;
+                    }
+                    if let Err(err) = dec.receive_frame(&mut frame) {
+                        warn!("接收音频数据包失败: {err}");
+                        continue;
+                    }
+
+                    // AudioBuffer::new(10, SignalSpec::new(rate, channels));
+                    let format = frame.format();
+                    let timestamp = frame
+                        .timestamp()
+                        .map(|x| x as f64 * f64::from(audio_time_base))
+                        .unwrap_or_default();
+
+                    last_play_pos = timestamp;
+                    ctx.current_audio_info.write().await.position = timestamp;
+                    ctx.play_pos_sx.send(Some((true, timestamp))).unwrap();
+
+                    fn make_audio_buf<
+                        T: symphonia::core::sample::Sample + ffmpeg_next::frame::audio::Sample,
+                    >(
+                        frame: &ffmpeg_next::frame::Audio,
+                        t: ffmpeg_next::format::sample::Type,
+                    ) -> anyhow::Result<AudioBuffer<T>> {
+                        use ffmpeg_next::format::sample::Type;
+                        let channel_layout = {
+                            let channel_layout = frame.channel_layout();
+                            if channel_layout == ffmpeg_next::ChannelLayout::MONO {
+                                symphonia::core::audio::Layout::Mono
+                            } else if channel_layout == ffmpeg_next::ChannelLayout::STEREO {
+                                symphonia::core::audio::Layout::Stereo
+                            } else if channel_layout == ffmpeg_next::ChannelLayout::_2POINT1 {
+                                symphonia::core::audio::Layout::TwoPointOne
+                            } else if channel_layout == ffmpeg_next::ChannelLayout::_5POINT1 {
+                                symphonia::core::audio::Layout::FivePointOne
+                            } else {
+                                anyhow::bail!("不支持的声道数据包 {channel_layout:?}")
+                            }
+                        };
+                        let nb_chan = frame.channels() as usize;
+                        let samples_per_channel = frame.samples();
+                        let mut abuf = AudioBuffer::<T>::new(
+                            samples_per_channel as u64,
+                            SignalSpec::new_with_layout(frame.rate(), channel_layout),
+                        );
+                        debug_assert_eq!(abuf.capacity(), samples_per_channel);
+                        abuf.render_reserved(Some(samples_per_channel));
+                        match t {
+                            Type::Packed => {
+                                let data = unsafe {
+                                    let data = frame.data(0);
+                                    std::slice::from_raw_parts(
+                                        data.as_ptr() as *const T,
+                                        data.len() / std::mem::size_of::<T>(),
+                                    )
+                                };
+                                for i in 0..nb_chan {
+                                    let chan = abuf.chan_mut(i);
+                                    for (si, s) in chan.iter_mut().enumerate() {
+                                        *s = data[si * nb_chan + i];
+                                    }
+                                }
+                            }
+                            Type::Planar => {
+                                for i in 0..nb_chan {
+                                    let chan = abuf.chan_mut(i);
+                                    chan.copy_from_slice(frame.plane(i));
+                                }
+                            }
+                        }
+                        Ok(abuf)
+                    }
+
+                    // TODO: 根据实际情况启用或禁用频谱数据，节省通道带宽
+                    match format {
+                        Sample::U8(t) => {
+                            let abuf = make_audio_buf::<u8>(&frame, t)?;
+                            let abuf = abuf.as_audio_buffer_ref();
+                            ctx.fft_player.lock().await.push_data(&abuf);
+                            ctx.audio_tx.write_ref(abuf).await
+                        }
+                        Sample::I16(t) => {
+                            let abuf = make_audio_buf::<i16>(&frame, t)?;
+                            let abuf = abuf.as_audio_buffer_ref();
+                            ctx.fft_player.lock().await.push_data(&abuf);
+                            ctx.audio_tx.write_ref(abuf).await
+                        }
+                        Sample::I32(t) => {
+                            let abuf = make_audio_buf::<i32>(&frame, t)?;
+                            let abuf = abuf.as_audio_buffer_ref();
+                            ctx.fft_player.lock().await.push_data(&abuf);
+                            ctx.audio_tx.write_ref(abuf).await
+                        }
+                        Sample::I64(_) => {
+                            warn!("不支持 I64 采样类型");
+                            Ok(())
+                        }
+                        Sample::F32(t) => {
+                            let abuf = make_audio_buf::<f32>(&frame, t)?;
+                            let abuf = abuf.as_audio_buffer_ref();
+                            ctx.fft_player.lock().await.push_data(&abuf);
+                            ctx.audio_tx.write_ref(abuf).await
+                        }
+                        Sample::F64(t) => {
+                            let abuf = make_audio_buf::<f64>(&frame, t)?;
+                            let abuf = abuf.as_audio_buffer_ref();
+                            ctx.fft_player.lock().await.push_data(&abuf);
+                            ctx.audio_tx.write_ref(abuf).await
+                        }
+                        _ => Ok(()),
+                    }
+                    .context("将音频包写入音频输出时发生错误")?;
+                    let _ = ctx.fft_has_data_sx.send(());
+                }
+            } else if let Some(msg) = ctx.play_rx.recv().await {
+                // TODO: 合并冗余代码
+                match msg {
+                    AudioThreadMessage::SeekAudio { position, .. } => {
+                        // let _ = ictx.seek((position / audio_time_base) as _, ..);
+                        ctx.play_pos_sx.send(Some((false, position))).unwrap();
+                        ctx.current_audio_info.write().await.position = position;
+                    }
+                    AudioThreadMessage::ResumeAudio { .. } => {
+                        is_playing = true;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // Ok(())
+        // }
+        // )
+        // .await??;
 
         ctx.emitter
             .emit(AudioThreadEvent::AudioPlayFinished { music_id })
@@ -1016,7 +1155,7 @@ impl AudioPlayer {
                         ctx.fft_player.lock().await.push_data(&buf);
                         let _ = ctx.fft_has_data_sx.send(());
 
-                        ctx.audio_tx.write_ref(0, buf).await?;
+                        ctx.audio_tx.write_ref(buf).await?;
                     }
                     Err(symphonia::core::errors::Error::DecodeError(err)) => {
                         warn!("解码数据块出错，跳过当前块: {}", err);

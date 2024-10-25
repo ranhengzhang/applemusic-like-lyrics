@@ -171,7 +171,7 @@ fn init_audio_stream_inner<T: AudioOutputSample + Into<f64>>(
     selected_config: StreamConfig,
 ) -> Box<dyn AudioOutput> {
     let channels = selected_config.channels;
-    const RING_BUF_SIZE_MS: usize = 256;
+    const RING_BUF_SIZE_MS: usize = 50;
     let ring_len =
         ((RING_BUF_SIZE_MS * selected_config.sample_rate.0 as usize) / 1000) * channels as usize;
     info!(
@@ -337,7 +337,7 @@ impl AsAudioBufferRef for OwnedAudioBuffer {
 }
 
 enum AudioOutputMessage {
-    Write(usize, OwnedAudioBuffer),
+    ClearBuffer,
     ChangeOutput(String),
     SetVolume(f64),
 }
@@ -345,10 +345,11 @@ enum AudioOutputMessage {
 #[derive(Debug, Clone)]
 pub struct AudioOutputSender {
     sender: Sender<AudioOutputMessage>,
+    pcm_sender: Sender<OwnedAudioBuffer>,
 }
 
 impl AudioOutputSender {
-    pub async fn write_ref(&self, id: usize, decoded: AudioBufferRef<'_>) -> anyhow::Result<()> {
+    pub async fn write_ref(&self, decoded: AudioBufferRef<'_>) -> anyhow::Result<()> {
         let buf = match decoded {
             AudioBufferRef::U8(x) => OwnedAudioBuffer::U8(x.into_owned()),
             AudioBufferRef::U16(x) => OwnedAudioBuffer::U16(x.into_owned()),
@@ -361,18 +362,19 @@ impl AudioOutputSender {
             AudioBufferRef::F32(x) => OwnedAudioBuffer::F32(x.into_owned()),
             AudioBufferRef::F64(x) => OwnedAudioBuffer::F64(x.into_owned()),
         };
-        self.sender.send(AudioOutputMessage::Write(id, buf)).await?;
+        self.pcm_sender.send(buf).await?;
         Ok(())
     }
 
     pub async fn wait_empty(&self) {
         self.sender.reserve_many(self.sender.max_capacity()).await;
+        self.pcm_sender
+            .reserve_many(self.pcm_sender.max_capacity())
+            .await;
     }
 
-    pub async fn write(&self, id: usize, decoded: OwnedAudioBuffer) -> anyhow::Result<()> {
-        self.sender
-            .send(AudioOutputMessage::Write(id, decoded))
-            .await?;
+    pub async fn write(&self, decoded: OwnedAudioBuffer) -> anyhow::Result<()> {
+        self.pcm_sender.send(decoded).await?;
         Ok(())
     }
 
@@ -382,11 +384,17 @@ impl AudioOutputSender {
             .await?;
         Ok(())
     }
+
+    pub async fn clear_buffer(&self) -> anyhow::Result<()> {
+        self.sender.send(AudioOutputMessage::ClearBuffer).await?;
+        Ok(())
+    }
 }
 
 // TODO: 允许指定需要的输出设备
 pub fn create_audio_output_thread() -> AudioOutputSender {
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<AudioOutputMessage>(1);
+    let (pcm_tx, mut pcm_rx) = tokio::sync::mpsc::channel::<OwnedAudioBuffer>(2);
+    let (tx, mut msg_rx) = tokio::sync::mpsc::channel::<AudioOutputMessage>(1);
     let handle = tokio::runtime::Handle::current();
     let poll_default_tx = tx.clone();
     // 通过轮询检测是否需要重新创建音频输出设备流
@@ -411,6 +419,7 @@ pub fn create_audio_output_thread() -> AudioOutputSender {
             }
         }
     });
+    let handle_c = handle.clone();
     handle.spawn_blocking(move || {
         let mut output = init_audio_player("").ok();
         let mut current_volume = 0.5;
@@ -420,52 +429,73 @@ pub fn create_audio_output_thread() -> AudioOutputSender {
         }
         let mut current_id = 0;
         info!("音频线程正在开始工作！");
-        while let Some(msg) = rx.blocking_recv() {
-            match msg {
-                AudioOutputMessage::Write(id, decoded) => {
-                    if id >= current_id || id == 0 {
-                        current_id = id;
-                        let mut should_recrate = false;
-                        if let Some(output) = &mut output {
-                            if output.is_dead() {
-                                should_recrate = true;
-                                info!("现有输出设备已断开，正在重新初始化播放器");
-                            } else {
-                                output.write(decoded.as_audio_buffer_ref());
-                            }
-                        }
-                        if should_recrate {
-                            output = init_audio_player("").ok();
-                            if let Some(output) = &mut output {
-                                output.set_volume(current_volume);
-                                output.stream().play().unwrap();
-                            }
-                            continue;
-                        }
+        loop {
+            enum PollResult {
+                Pcm(OwnedAudioBuffer),
+                Msg(AudioOutputMessage),
+            }
+            let poll_result = handle_c.block_on(async {
+                tokio::select! {
+                    biased;
+                    pcm = pcm_rx.recv() => {
+                        pcm.map(PollResult::Pcm)
+                    }
+                    msg = msg_rx.recv() => {
+                        msg.map(PollResult::Msg)
                     }
                 }
-                AudioOutputMessage::ChangeOutput(output_name) => {
-                    match init_audio_player(&output_name) {
-                        Ok(mut new_output) => {
-                            new_output.set_volume(current_volume);
-                            new_output.stream().play().unwrap();
-                            output = Some(new_output);
-                            info!("已切换输出设备")
-                        }
-                        Err(err) => {
-                            warn!("无法切换到输出设备 {output_name}: {err}");
-                            output = None;
-                        }
-                    }
-                }
-                AudioOutputMessage::SetVolume(volume) => {
+            });
+            match poll_result {
+                Some(PollResult::Pcm(pcm)) => {
+                    let mut should_recrate = false;
                     if let Some(output) = &mut output {
-                        output.set_volume(volume);
+                        if output.is_dead() {
+                            should_recrate = true;
+                            info!("现有输出设备已断开，正在重新初始化播放器");
+                        } else {
+                            output.write(pcm.as_audio_buffer_ref());
+                        }
                     }
+                    if should_recrate {
+                        output = init_audio_player("").ok();
+                        if let Some(output) = &mut output {
+                            output.set_volume(current_volume);
+                            output.stream().play().unwrap();
+                        }
+                    }
+                }
+                Some(PollResult::Msg(msg)) => match msg {
+                    AudioOutputMessage::ChangeOutput(output_name) => {
+                        match init_audio_player(&output_name) {
+                            Ok(mut new_output) => {
+                                new_output.set_volume(current_volume);
+                                new_output.stream().play().unwrap();
+                                output = Some(new_output);
+                                info!("已切换输出设备")
+                            }
+                            Err(err) => {
+                                warn!("无法切换到输出设备 {output_name}: {err}");
+                                output = None;
+                            }
+                        }
+                    }
+                    AudioOutputMessage::SetVolume(volume) => {
+                        if let Some(output) = &mut output {
+                            output.set_volume(volume);
+                        }
+                    }
+                    AudioOutputMessage::ClearBuffer => while pcm_rx.try_recv().is_ok() {},
+                },
+                None => {
+                    break;
                 }
             }
         }
+
         info!("所有接收者已关闭，音频线程即将结束！");
     });
-    AudioOutputSender { sender: tx }
+    AudioOutputSender {
+        sender: tx,
+        pcm_sender: pcm_tx,
+    }
 }

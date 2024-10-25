@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use std::{cell::Cell, collections::VecDeque, time::Instant};
 
 use spectrum_analyzer::*;

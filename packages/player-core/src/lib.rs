@@ -62,6 +62,8 @@ pub enum AudioThreadMessage {
     #[serde(rename_all = "camelCase")]
     NextSong,
     #[serde(rename_all = "camelCase")]
+    NextSongGapless,
+    #[serde(rename_all = "camelCase")]
     SetPlaylist { songs: Vec<SongData> },
     #[serde(rename_all = "camelCase")]
     SetVolume { volume: f64 },

@@ -686,8 +686,7 @@ checksum = "e8c02a5121d4ea3eb16a80748c74f5549a5665e4c21333c6098f283870fbdea6"
 [[package]]
 name = "ffmpeg-next"
 version = "7.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da02698288e0275e442a47fc12ca26d50daf0d48b15398ba5906f20ac2e2a9f9"
+source = "git+https://github.com/Steve-xmh/rust-ffmpeg.git?branch=patch-1#541a6c48bf86b7dbc53aaa782d24831d49bacefb"
 dependencies = [
  "bitflags 2.6.0",
  "ffmpeg-sys-next",
