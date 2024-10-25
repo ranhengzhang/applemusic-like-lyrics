@@ -437,11 +437,11 @@ pub fn create_audio_output_thread() -> AudioOutputSender {
             let poll_result = handle_c.block_on(async {
                 tokio::select! {
                     biased;
-                    pcm = pcm_rx.recv() => {
-                        pcm.map(PollResult::Pcm)
-                    }
                     msg = msg_rx.recv() => {
                         msg.map(PollResult::Msg)
+                    }
+                    pcm = pcm_rx.recv() => {
+                        pcm.map(PollResult::Pcm)
                     }
                 }
             });
