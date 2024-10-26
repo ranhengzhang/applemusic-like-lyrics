@@ -1,5 +1,5 @@
 import { PlayIcon } from "@radix-ui/react-icons";
-import { Avatar, Box, type BoxProps, Inset } from "@radix-ui/themes";
+import { Avatar, Box, Flex, type FlexProps, Inset } from "@radix-ui/themes";
 import classNames from "classnames";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useAtomValue } from "jotai";
@@ -14,7 +14,7 @@ import {
 	useState,
 } from "react";
 import { Trans } from "react-i18next";
-import { FixedSizeList } from "react-window";
+import { ViewportList, type ViewportListRef } from "react-viewport-list";
 import { type Song, db } from "../../dexie.ts";
 import {
 	currentPlaylistAtom,
@@ -95,40 +95,46 @@ const PlaylistSongItem: FC<
 	);
 };
 
-export const PlaylistCard: FC<BoxProps> = (props) => {
+export const PlaylistCard: FC<FlexProps> = (props) => {
 	const playlist = useAtomValue(currentPlaylistAtom);
-	const playlistRef = useRef<FixedSizeList>(null);
 	const playlistIndex = useAtomValue(currentPlaylistMusicIndexAtom);
+	const playlistRef = useRef<ViewportListRef>();
+	const playlistContainerRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
 		if (playlistRef.current) {
-			playlistRef.current.scrollToItem(playlistIndex, "center");
+			playlistRef.current.scrollToIndex({
+				index: playlistIndex,
+			});
 		}
 	}, [playlistIndex]);
 
 	return (
-		<Box maxWidth="400px" maxHeight="500px" {...props}>
+		<Flex direction="column" maxWidth="400px" maxHeight="500px" {...props}>
 			<Box py="3" px="4">
 				<Trans i18nKey="playbar.playlist.title">当前播放列表</Trans>
 			</Box>
-			<Inset clip="padding-box" side="bottom" pb="current">
-				<FixedSizeList
-					itemSize={50 + 8 * 2}
-					itemCount={playlist.length}
-					height={400}
-					width="100%"
+			<Inset
+				clip="padding-box"
+				side="bottom"
+				pb="current"
+				style={{ overflowY: "auto" }}
+				ref={playlistContainerRef}
+			>
+				<ViewportList
+					items={playlist}
 					ref={playlistRef}
+					viewportRef={playlistContainerRef}
 				>
-					{({ index, style }) => (
+					{(songData, index) => (
 						<PlaylistSongItem
 							key={`playlist-song-item-${index}`}
-							songData={playlist[index]}
+							songData={songData}
 							index={index}
-							style={style}
 						/>
 					)}
-				</FixedSizeList>
+				</ViewportList>
 			</Inset>
-		</Box>
+		</Flex>
 	);
 };

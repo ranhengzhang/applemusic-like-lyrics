@@ -1,7 +1,7 @@
 import { ExclamationTriangleIcon } from "@radix-ui/react-icons";
 import { Callout } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
-import { type ComponentType, type FC, useMemo } from "react";
+import { type ComponentType, type FC, Fragment, useMemo } from "react";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { Trans, useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
@@ -50,25 +50,30 @@ export const ExtensionInjectPoint: FC<{
 	);
 	const { t } = useTranslation();
 
-	return injectedPoint.map(([id, InjectedComponent]) => (
-		<ErrorBoundary
-			key={`inject-point-${injectPointName}-${id}`}
-			onError={(error, _info) => {
-				toast.error(
-					t(
-						"extension.inject.error.toastText",
-						"扩展程序 {id} 在注入组件 / 功能到 {injectPointName} 槽位时发生错误：\n{error}",
-						{
-							id,
-							injectPointName,
-							error: String(error),
-						},
-					),
-				);
-			}}
-			fallbackRender={() => (hideErrorCallout ? null : <ErrorCallout />)}
-		>
-			<InjectedComponent />
-		</ErrorBoundary>
-	));
+	return (
+		<Fragment>
+			<div style={{ display: "none" }} data-inject-point-id={injectPointName} />
+			{injectedPoint.map(([id, InjectedComponent]) => (
+				<ErrorBoundary
+					key={`inject-point-${injectPointName}-${id}`}
+					onError={(error, _info) => {
+						toast.error(
+							t(
+								"extension.inject.error.toastText",
+								"扩展程序 {id} 在注入组件 / 功能到 {injectPointName} 槽位时发生错误：\n{error}",
+								{
+									id,
+									injectPointName,
+									error: String(error),
+								},
+							),
+						);
+					}}
+					fallbackRender={() => (hideErrorCallout ? null : <ErrorCallout />)}
+				>
+					<InjectedComponent />
+				</ErrorBoundary>
+			))}
+		</Fragment>
+	);
 };

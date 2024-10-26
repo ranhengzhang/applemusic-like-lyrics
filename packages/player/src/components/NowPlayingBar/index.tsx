@@ -22,7 +22,7 @@ import {
 import { Container, Flex, IconButton } from "@radix-ui/themes";
 import classNames from "classnames";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import type { FC } from "react";
+import { type FC, useLayoutEffect, useRef } from "react";
 import IconForward from "../../assets/icon_forward.svg?react";
 import IconPause from "../../assets/icon_pause.svg?react";
 import IconPlay from "../../assets/icon_play.svg?react";
@@ -47,6 +47,27 @@ export const NowPlayingBar: FC = () => {
 	const onRequestPrevSong = useAtomValue(onRequestPrevSongAtom).onEmit;
 	const onRequestNextSong = useAtomValue(onRequestNextSongAtom).onEmit;
 
+	const playbarRef = useRef<HTMLDivElement>(null);
+
+	useLayoutEffect(() => {
+		const playbarEl = playbarRef.current;
+		if (!playbarEl) return;
+		const updateSafeBound = () => {
+			const { top } = playbarEl.getBoundingClientRect();
+			document.body.style.setProperty(
+				"--amll-player-playbar-bottom",
+				`${innerHeight - top}px`,
+			);
+		};
+		const observer = new ResizeObserver(updateSafeBound);
+		addEventListener("resize", updateSafeBound);
+		observer.observe(playbarEl);
+		return () => {
+			removeEventListener("resize", updateSafeBound);
+			observer.disconnect();
+		};
+	}, []);
+
 	return (
 		<Container
 			className={classNames(
@@ -66,6 +87,7 @@ export const NowPlayingBar: FC = () => {
 			<Flex
 				className={classNames(styles.playBar, hideNowPlayingBar && styles.hide)}
 				overflow="hidden"
+				ref={playbarRef}
 			>
 				<Flex
 					direction="row"

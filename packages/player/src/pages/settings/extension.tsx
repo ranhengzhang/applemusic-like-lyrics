@@ -14,6 +14,7 @@ import { path } from "@tauri-apps/api";
 import { BaseDirectory } from "@tauri-apps/api/path";
 import { open as dialogOpen } from "@tauri-apps/plugin-dialog";
 import { copyFile, mkdir, remove, rename } from "@tauri-apps/plugin-fs";
+import { platform } from "@tauri-apps/plugin-os";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { atom, useAtomValue, useStore } from "jotai";
 import type { FC } from "react";
@@ -60,21 +61,28 @@ export const ExtensionTab: FC = () => {
 				<Button
 					onClick={async () => {
 						const extensionDir = await store.get(extensionDirAtom);
+						const filters = [
+							{
+								name: t("common.dialog.filter.js", "JavaScript 文件 (*.js)"),
+								extensions: ["js"],
+							},
+							{
+								name: t("common.dialog.filter.all", "全部文件 (*.*)"),
+								extensions: [],
+							},
+						];
+						if (platform() === "android") {
+							filters.length = 0;
+						}
+						if (platform() === "ios") {
+							filters.length = 0;
+						}
 						const extensionFiles = await dialogOpen({
 							title: t(
 								"settings.extension.install.title",
 								"请选择需要载入的 JavaScript 扩展程序文件",
 							),
-							filters: [
-								{
-									name: t("common.dialog.filter.js", "JavaScript 文件 (*.js)"),
-									extensions: ["js"],
-								},
-								{
-									name: t("common.dialog.filter.all", "全部文件 (*.*)"),
-									extensions: [],
-								},
-							],
+							filters,
 							multiple: true,
 						});
 						if (extensionFiles === null) return;

@@ -23,21 +23,21 @@ import { path } from "@tauri-apps/api";
 import { open } from "@tauri-apps/plugin-dialog";
 import { platform } from "@tauri-apps/plugin-os";
 import { useLiveQuery } from "dexie-react-hooks";
+import { motion, useMotionTemplate, useScroll } from "framer-motion";
 import md5 from "md5";
 import {
 	type CSSProperties,
 	type FC,
-	type HTMLProps,
 	forwardRef,
 	useCallback,
 	useMemo,
+	useRef,
 	useState,
 } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
-import AutoSizer from "react-virtualized-auto-sizer";
-import { SortableFixedSizeList } from "react-window-sortable";
+import { ViewportList } from "react-viewport-list";
 import { PlaylistCover } from "../../components/PlaylistCover/index.tsx";
 import { type Song, db } from "../../dexie.ts";
 import { router } from "../../router.tsx";
@@ -112,7 +112,7 @@ export const SongCard = forwardRef<
 			ref={ref}
 			onDoubleClick={() => onPlayList(songIndex)}
 		>
-			<Box py="4" pr="4" style={style}>
+			<Box py="1" pr="4" style={style}>
 				<Card>
 					<Flex p="1" align="center" gap="4">
 						<Avatar size="5" fallback={<div />} src={songImgUrl} />
@@ -178,21 +178,6 @@ export const SongCard = forwardRef<
 	);
 });
 
-const BOTTOM_PADDING = 150;
-
-const PlaylistViewInner = forwardRef<HTMLDivElement, HTMLProps<HTMLDivElement>>(
-	({ style, ...rest }, ref) => (
-		<div
-			ref={ref}
-			style={{
-				...style,
-				height: `${(Number.parseFloat(style?.height?.toString() || "") || 0) + BOTTOM_PADDING}px`,
-			}}
-			{...rest}
-		/>
-	),
-);
-
 const EditablePlaylistName: FC<{
 	playlistName: string;
 	onPlaylistNameChange: (newName: string) => void;
@@ -244,6 +229,11 @@ export const Component: FC = () => {
 	const param = useParams();
 	const playlist = useLiveQuery(() => db.playlists.get(Number(param.id)));
 	const { t } = useTranslation();
+	const playlistViewRef = useRef<HTMLDivElement>(null);
+	const playlistViewScroll = useScroll({
+		container: playlistViewRef,
+	});
+	const playlistCoverSize = useMotionTemplate`clamp(6em,calc(12em - ${playlistViewScroll.scrollY}px),12em)`;
 
 	const onAddLocalMusics = useCallback(async () => {
 		const filters = [
@@ -437,12 +427,18 @@ export const Component: FC = () => {
 						</Button>
 					</Flex>
 					<Flex align="end" gap="4">
-						<PlaylistCover
-							playlistId={Number(param.id)}
+						<motion.div
 							style={{
-								width: "12em",
+								width: playlistCoverSize,
 							}}
-						/>
+						>
+							<PlaylistCover
+								playlistId={Number(param.id)}
+								style={{
+									width: "100%",
+								}}
+							/>
+						</motion.div>
 						<Flex
 							direction="column"
 							gap="4"
@@ -520,33 +516,29 @@ export const Component: FC = () => {
 						</Flex>
 					</Flex>
 				</Flex>
-				<Box flexGrow="1" overflow="hidden" minHeight="0">
+				<Box
+					flexGrow="1"
+					overflowY="scroll"
+					minHeight="0"
+					ref={playlistViewRef}
+					style={{
+						paddingBottom: "var(--amll-player-playbar-bottom)",
+					}}
+				>
 					{playlist?.songIds && (
-						<AutoSizer>
-							{({ width, height }) => (
-								<SortableFixedSizeList
-									itemCount={playlist.songIds.length}
-									itemSize={96 + 16}
-									innerElementType={PlaylistViewInner}
-									width={width}
-									height={height}
-									onSortOrderChanged={({ originalIndex, newIndex }) => {
-										// TODO
-									}}
-								>
-									{forwardRef(({ index, style }, ref) => (
-										<SongCard
-											songId={playlist.songIds[index]}
-											songIndex={index}
-											style={style}
-											onPlayList={onPlayList}
-											onDeleteSong={onDeleteSong}
-											ref={ref}
-										/>
-									))}
-								</SortableFixedSizeList>
+						<ViewportList
+							items={playlist.songIds}
+							viewportRef={playlistViewRef}
+						>
+							{(songId, index) => (
+								<SongCard
+									songId={songId}
+									songIndex={index}
+									onPlayList={onPlayList}
+									onDeleteSong={onDeleteSong}
+								/>
 							)}
-						</AutoSizer>
+						</ViewportList>
 					)}
 				</Box>
 			</Flex>
