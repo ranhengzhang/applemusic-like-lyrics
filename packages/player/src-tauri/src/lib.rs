@@ -232,8 +232,7 @@ pub fn run() {
     #[allow(unused_mut)]
     let mut context = tauri::generate_context!();
 
-    let builder =
-        tauri::Builder::default().plugin(tauri_plugin_global_shortcut::Builder::new().build());
+    let builder = tauri::Builder::default();
 
     #[cfg(not(mobile))]
     let pubkey = {
