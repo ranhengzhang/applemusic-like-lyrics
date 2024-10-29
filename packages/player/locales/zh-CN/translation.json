@@ -14,7 +14,7 @@
       "codec": "音频解码器",
       "channels": "音频通道数量",
       "sampleRate": "采样率",
-      "sampleFormat": "采样率"
+      "sampleFormat": "采样格式"
     },
     "qualityTag": {
       "lossless": "无损",

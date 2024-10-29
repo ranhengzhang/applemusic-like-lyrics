@@ -39,7 +39,7 @@ export const AudioQualityDialog: FC = () => {
 						<DataList.Value>{musicQuality.sampleRate} hz</DataList.Value>
 					</DataList.Item>
 					<DataList.Item>
-						<Trans i18nKey="amll.audioQuality.sampleFormat">采样率</Trans>
+						<Trans i18nKey="amll.audioQuality.sampleFormat">采样格式</Trans>
 						<DataList.Value>{musicQuality.sampleFormat}</DataList.Value>
 					</DataList.Item>
 				</DataList.Root>
