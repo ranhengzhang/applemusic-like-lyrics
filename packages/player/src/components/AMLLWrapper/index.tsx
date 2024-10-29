@@ -21,6 +21,7 @@ import {
 	lyricPlayerImplementationAtom,
 } from "../../states/index.ts";
 import { AMLLContextMenuContent } from "../AMLLContextMenu/index.tsx";
+import { AudioQualityDialog } from "../AudioQualityDialog/index.tsx";
 import styles from "./index.module.css";
 
 export const AMLLWrapper: FC = () => {
@@ -78,17 +79,20 @@ export const AMLLWrapper: FC = () => {
 	}, [lyricPlayerImplementation, setLyricPlayerImplementation]);
 
 	return (
-		<ContextMenu.Root>
-			<ContextMenu.Trigger>
-				<PrebuiltLyricPlayer
-					className={classnames(
-						styles.lyricPage,
-						isLyricPageOpened && styles.opened,
-					)}
-				/>
-			</ContextMenu.Trigger>
-			<AMLLContextMenuContent />
-		</ContextMenu.Root>
+		<>
+			<ContextMenu.Root>
+				<ContextMenu.Trigger>
+					<PrebuiltLyricPlayer
+						className={classnames(
+							styles.lyricPage,
+							isLyricPageOpened && styles.opened,
+						)}
+					/>
+				</ContextMenu.Trigger>
+				<AMLLContextMenuContent />
+			</ContextMenu.Root>
+			<AudioQualityDialog />
+		</>
 	);
 };
 

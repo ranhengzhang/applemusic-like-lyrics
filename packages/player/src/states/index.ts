@@ -7,7 +7,13 @@ export const musicIdAtom = atom("");
 export const playlistCardOpenedAtom = atom(false);
 export const currentPlaylistAtom = atom<SongData[]>([]);
 export const currentPlaylistMusicIndexAtom = atom(0);
-export const musicQualityAtom = atom(AudioQualityType.None);
+export const musicQualityAtom = atom({
+	type: AudioQualityType.None,
+	codec: "unknown",
+	channels: 2,
+	sampleRate: 44100,
+	sampleFormat: "s16",
+});
 
 export const displayLanguageAtom = atomWithStorage(
 	"amll-player.displayLanguage",
@@ -66,3 +72,5 @@ export enum MusicContextMode {
 }
 
 export const musicContextModeAtom = atom(MusicContextMode.Local);
+
+export const audioQualityDialogOpenedAtom = atom(false);

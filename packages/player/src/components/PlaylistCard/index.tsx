@@ -110,7 +110,18 @@ export const PlaylistCard: FC<FlexProps> = (props) => {
 	}, [playlistIndex]);
 
 	return (
-		<Flex direction="column" maxWidth="400px" maxHeight="500px" {...props}>
+		<Flex
+			direction="column"
+			maxWidth="400px"
+			maxHeight="500px"
+			style={{
+				height: "50vh",
+				width: "max(10vw, 50vh)",
+				backdropFilter: "blur(1em)",
+				backgroundColor: "var(--black-a8)",
+			}}
+			{...props}
+		>
 			<Box py="3" px="4">
 				<Trans i18nKey="playbar.playlist.title">当前播放列表</Trans>
 			</Box>

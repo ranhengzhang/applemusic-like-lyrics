@@ -19,7 +19,7 @@ import {
 	TrackNextIcon,
 	TrackPreviousIcon,
 } from "@radix-ui/react-icons";
-import { Container, Flex, IconButton } from "@radix-ui/themes";
+import { Flex, IconButton } from "@radix-ui/themes";
 import classNames from "classnames";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { type FC, useLayoutEffect, useRef } from "react";
@@ -69,18 +69,25 @@ export const NowPlayingBar: FC = () => {
 	}, []);
 
 	return (
-		<Container
-			className={classNames(
-				styles.nowPlayingBar,
-				hideNowPlayingBar && styles.hide,
-			)}
-			position="fixed"
-			bottom="0"
-			left="0"
-			right="0"
-		>
+		<>
+			{/* <Container
+		 	className={classNames(
+		 		styles.nowPlayingBar,
+		 		hideNowPlayingBar && styles.hide,
+		 	)}
+		 	position="fixed"
+		 	bottom="0"
+		 	left="0"
+		 	right="0"
+		 > */}
 			{playlistOpened && (
-				<Flex direction="row-reverse" mx="3">
+				<Flex
+					direction="row-reverse"
+					mx="3"
+					position="absolute"
+					right="0"
+					bottom="calc(var(--amll-player-playbar-bottom) + var(--space-3))"
+				>
 					<PlaylistCard className={classNames(styles.playlistCard)} />
 				</Flex>
 			)}
@@ -224,6 +231,7 @@ export const NowPlayingBar: FC = () => {
 					</IconButton>
 				</Flex>
 			</Flex>
-		</Container>
+			{/* </Container> */}
+		</>
 	);
 };

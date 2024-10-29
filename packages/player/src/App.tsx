@@ -1,15 +1,19 @@
-import { isLyricPageOpenedAtom } from "@applemusic-like-lyrics/react-full";
+import {
+	isLyricPageOpenedAtom,
+	onClickAudioQualityTagAtom,
+} from "@applemusic-like-lyrics/react-full";
 import { Box, Theme } from "@radix-ui/themes";
 import "@radix-ui/themes/styles.css";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import classNames from "classnames";
-import { useAtomValue } from "jotai";
+import { useAtomValue, useStore } from "jotai";
 import { StrictMode, Suspense, lazy, useEffect, useLayoutEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { RouterProvider } from "react-router-dom";
 import { ToastContainer } from "react-toastify";
 import Stats from "stats.js";
 import styles from "./App.module.css";
+import { AppContainer } from "./components/AppContainer/index.tsx";
 import { ExtensionInjectPoint } from "./components/ExtensionInjectPoint/index.tsx";
 import { LocalMusicContext } from "./components/LocalMusicContext/index.tsx";
 import { NowPlayingBar } from "./components/NowPlayingBar/index.tsx";
@@ -20,6 +24,7 @@ import "./i18n";
 import { router } from "./router.tsx";
 import {
 	MusicContextMode,
+	audioQualityDialogOpenedAtom,
 	displayLanguageAtom,
 	musicContextModeAtom,
 	showStatJSFrameAtom,
@@ -33,7 +38,16 @@ function App() {
 	const showStatJSFrame = useAtomValue(showStatJSFrameAtom);
 	const musicContextMode = useAtomValue(musicContextModeAtom);
 	const displayLanguage = useAtomValue(displayLanguageAtom);
+	const store = useStore();
 	const { i18n } = useTranslation();
+
+	useEffect(() => {
+		store.set(onClickAudioQualityTagAtom, {
+			onEmit() {
+				store.set(audioQualityDialogOpenedAtom, true);
+			},
+		});
+	}, [store]);
 
 	useEffect(() => {
 		(async () => {
@@ -87,6 +101,7 @@ function App() {
 				<Theme
 					appearance="dark"
 					panelBackground="solid"
+					hasBackground={false}
 					className={styles.radixTheme}
 				>
 					<Box
@@ -95,10 +110,12 @@ function App() {
 							isLyricPageOpened && styles.amllOpened,
 						)}
 					>
-						<Box className={styles.container}>
+						<AppContainer playbar={<NowPlayingBar />}>
 							<RouterProvider router={router} />
-						</Box>
-						<NowPlayingBar />
+						</AppContainer>
+						{/* <Box className={styles.container}>
+							<RouterProvider router={router} />
+						</Box> */}
 					</Box>
 					<Suspense>
 						<AMLLWrapper />

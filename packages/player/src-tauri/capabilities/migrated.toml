@@ -41,6 +41,10 @@ identifier = "shell:default"
 [[permissions]]
 identifier = "fs:default"
 [[permissions]]
+identifier = "fs:allow-write"
+[[permissions]]
+identifier = "fs:allow-app-write"
+[[permissions]]
 identifier = "fs:allow-rename"
 [[permissions]]
 identifier = "fs:allow-remove"

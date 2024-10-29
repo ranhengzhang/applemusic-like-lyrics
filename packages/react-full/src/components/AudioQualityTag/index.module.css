@@ -26,15 +26,7 @@
 }
 
 .clickable {
-	transition: all 0.25s;
-
-	&:hover {
-		scale: 1.1;
-	}
-
-	&:active {
-		scale: 0.99;
-	}
+	cursor: pointer;
 }
 
 .commonTag {

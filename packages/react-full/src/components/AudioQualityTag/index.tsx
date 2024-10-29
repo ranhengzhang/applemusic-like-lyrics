@@ -22,6 +22,12 @@ const COMMON_VARIENTS: Variants = {
 			ease: [0, 0.71, 0.2, 1.01],
 		},
 	},
+	hover: {
+		scale: 0.95,
+	},
+	active: {
+		scale: 0.9,
+	},
 };
 
 const DOLBY_VARIENTS: Variants = {
@@ -40,6 +46,12 @@ const DOLBY_VARIENTS: Variants = {
 			duration: 1,
 			ease: [0, 0.71, 0.2, 1.01],
 		},
+	},
+	hover: {
+		scale: 0.95,
+	},
+	active: {
+		scale: 0.9,
 	},
 };
 
@@ -65,6 +77,8 @@ export const AudioQualityTag: FC<
 					key="dolby-atmos"
 					initial="hide"
 					animate="show"
+					whileHover={onClick ? "hover" : undefined}
+					whileTap={onClick ? "active" : undefined}
 					exit="hide"
 					className={styles.dolbyLogo}
 					variants={DOLBY_VARIENTS}
@@ -77,6 +91,8 @@ export const AudioQualityTag: FC<
 					key={`common-tag-${tagIcon}-${tagText}`}
 					initial="hide"
 					animate="show"
+					whileHover={onClick ? "hover" : undefined}
+					whileTap={onClick ? "active" : undefined}
 					exit="hide"
 					variants={COMMON_VARIENTS}
 				>

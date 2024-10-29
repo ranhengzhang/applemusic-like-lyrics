@@ -5,7 +5,6 @@
 	font-size: 12px;
 
 	color: white;
-	background-color: #222;
 
 	font-synthesis: none;
 	text-rendering: optimizeLegibility;
@@ -13,7 +12,7 @@
 	-moz-osx-font-smoothing: grayscale;
 	-webkit-text-size-adjust: 100%;
 
-	background-color: var(--color-background);
+	background-color: var(--color-background, transparent);
 }
 
 body {
@@ -35,6 +34,32 @@ body {
 		margin-left: 0;
 		margin-top: 0;
 		margin-right: 17px !important;
+	}
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+
+	&:hover {
+		background: transparent;
+	}
+}
+
+::-webkit-scrollbar {
+	background-color: transparent;
+	width: 20px;
+}
+
+::-webkit-scrollbar-thumb {
+	border: solid 6px transparent;
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.0509803922), inset 0 0 0 6px
+		rgba(255, 255, 255, 0.1137254902);
+	border-radius: 10px;
+	background: transparent;
+	min-height: max(5%, 5vh, 5vw);
+
+	&:hover {
+		background: transparent;
 	}
 }
 

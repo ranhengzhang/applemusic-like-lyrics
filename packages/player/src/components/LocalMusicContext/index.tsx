@@ -200,7 +200,7 @@ const MusicQualityTagText: FC = () => {
 	const setMusicQualityTag = useSetAtom(musicQualityTagAtom);
 
 	useLayoutEffect(() => {
-		switch (musicQuality) {
+		switch (musicQuality.type) {
 			case AudioQualityType.None:
 				return setMusicQualityTag(null);
 			case AudioQualityType.Lossless:
@@ -575,7 +575,13 @@ export const LocalMusicContext: FC = () => {
 			if ((quality.channels || 0) > 2) {
 				result = AudioQualityType.DolbyAtmos;
 			}
-			store.set(musicQualityAtom, result);
+			store.set(musicQualityAtom, {
+				type: result,
+				codec: quality.codec ?? "unknown",
+				channels: quality.channels ?? Number.NaN,
+				sampleRate: quality.sampleRate ?? Number.NaN,
+				sampleFormat: quality.sampleFormat ?? "unknown",
+			});
 		};
 		const unlistenPromise = listenAudioThreadEvent((evt) => {
 			const evtData = evt.payload.data;

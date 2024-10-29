@@ -76,7 +76,7 @@ const SettingEntry: FC<
 > = ({ label, description, children }) => {
 	return (
 		<Card mt="2">
-			<Flex direction="row" align="center" gap="4">
+			<Flex direction="row" align="center" gap="4" wrap="wrap">
 				<Flex direction="column" flexGrow="1">
 					<Text as="div">{label}</Text>
 					<Text as="div" color="gray" size="2" className={styles.desc}>
@@ -223,7 +223,7 @@ const LyricFontSetting: FC = () => {
 					</Text>
 				</Flex>
 			</Flex>
-			<Flex direction="row" align="center" gap="4" my="2">
+			<Flex direction="row" align="center" gap="4" my="2" wrap="wrap">
 				<Flex direction="column" flexGrow="1">
 					<Text as="div">
 						<Trans i18nKey="page.settings.lyricFont.fontFamily.label">
@@ -242,7 +242,7 @@ const LyricFontSetting: FC = () => {
 					onChange={(e) => setFontFamily(e.currentTarget.value)}
 				/>
 			</Flex>
-			<Flex direction="row" align="center" gap="4" my="2">
+			<Flex direction="row" align="center" gap="4" my="2" wrap="wrap">
 				<Flex direction="column" flexGrow="1">
 					<Text as="div">
 						<Trans i18nKey="page.settings.lyricFont.fontWeight.label">
@@ -272,7 +272,7 @@ const LyricFontSetting: FC = () => {
 					onValueChange={([value]) => setFontWeight(value)}
 				/>
 			</Flex>
-			<Flex direction="row" align="center" gap="4" my="2">
+			<Flex direction="row" align="center" gap="4" my="2" wrap="wrap">
 				<Flex direction="column" flexGrow="1">
 					<Text as="div">
 						<Trans i18nKey="page.settings.lyricFont.letterSpacing.label">
@@ -290,7 +290,7 @@ const LyricFontSetting: FC = () => {
 					onChange={(e) => setLetterSpacing(e.currentTarget.value)}
 				/>
 			</Flex>
-			<Flex direction="row" align="center" gap="4" my="2">
+			<Flex direction="row" align="center" gap="4" my="2" wrap="wrap">
 				<Flex direction="column" flexGrow="1">
 					<Text as="div">
 						<Trans i18nKey="page.settings.lyricFont.fontPreview.label">
@@ -804,6 +804,7 @@ export const PlayerSettingsTab: FC = () => {
 				{/* biome-ignore lint/complexity/useOptionalChain: <explanation> */}
 				{updateInfo && updateInfo.available && (
 					<>
+						<Separator size="4" my="3" />
 						<div id="updater">
 							{t(
 								"page.about.newVersion",
@@ -885,6 +886,7 @@ export const PlayerSettingsTab: FC = () => {
 						>
 							<Trans i18nKey="page.about.installUpdate">更新并安装</Trans>
 						</Button>
+						<Box mb="3" />
 					</>
 				)}
 			</Suspense>

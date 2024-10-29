@@ -11,6 +11,7 @@ import {
 	Button,
 	Card,
 	Container,
+	ContextMenu,
 	DropdownMenu,
 	Flex,
 	Heading,
@@ -21,6 +22,7 @@ import {
 } from "@radix-ui/themes";
 import { path } from "@tauri-apps/api";
 import { open } from "@tauri-apps/plugin-dialog";
+import { stat } from "@tauri-apps/plugin-fs";
 import { platform } from "@tauri-apps/plugin-os";
 import { useLiveQuery } from "dexie-react-hooks";
 import { motion, useMotionTemplate, useScroll } from "framer-motion";
@@ -234,9 +236,10 @@ export const Component: FC = () => {
 		container: playlistViewRef,
 	});
 	const playlistCoverSize = useMotionTemplate`clamp(6em,calc(12em - ${playlistViewScroll.scrollY}px),12em)`;
+	const playlistInfoGapSize = useMotionTemplate`clamp(var(--space-1), calc(var(--space-4) - ${playlistViewScroll.scrollY}px / 5), var(--space-4))`;
 
 	const onAddLocalMusics = useCallback(async () => {
-		const filters = [
+		let filters = [
 			{
 				name: t("page.playlist.addLocalMusic.filterName", "音频文件"),
 				extensions: ["mp3", "flac", "wav", "m4a", "aac", "ogg"],
@@ -247,7 +250,16 @@ export const Component: FC = () => {
 			},
 		];
 		if (platform() === "android") {
-			filters.length = 0;
+			filters = [
+				{
+					name: t("page.playlist.addLocalMusic.filterName", "音频文件"),
+					extensions: ["audio/*"],
+				},
+				{
+					name: t("page.playlist.addLocalMusic.allFiles", "所有文件"),
+					extensions: ["*/*"],
+				},
+			];
 		}
 		if (platform() === "ios") {
 			filters.length = 0;
@@ -276,9 +288,11 @@ export const Component: FC = () => {
 			await Promise.all(
 				results.map(async (v) => {
 					let normalized = v;
+					console.log(v);
 					if (platform() !== "android" && platform() !== "ios") {
 						normalized = (await path.normalize(v)).replace(/\\/gi, "/");
 					}
+					console.log(await stat(v));
 					try {
 						const pathMd5 = md5(normalized);
 						const musicInfo = await readLocalMusicMetadata(normalized);
@@ -426,99 +440,156 @@ export const Component: FC = () => {
 							<Trans i18nKey="common.page.back">返回</Trans>
 						</Button>
 					</Flex>
-					<Flex align="end" gap="4">
+					<Flex align="end" gap="3">
 						<motion.div
 							style={{
 								width: playlistCoverSize,
 							}}
 						>
-							<PlaylistCover
-								playlistId={Number(param.id)}
-								style={{
-									width: "100%",
-								}}
-							/>
+							<ContextMenu.Root>
+								<ContextMenu.Trigger>
+									<PlaylistCover
+										playlistId={Number(param.id)}
+										style={{
+											width: "100%",
+										}}
+									/>
+								</ContextMenu.Trigger>
+								<ContextMenu.Content>
+									<ContextMenu.Item
+										onClick={() => {
+											db.playlists.update(Number(param.id), (obj) => {
+												obj.playlistCover = undefined;
+											});
+										}}
+									>
+										<Trans i18nKey="page.playlist.cover.changeCoverToAuto">
+											更换成自动封面
+										</Trans>
+									</ContextMenu.Item>
+									<ContextMenu.Item
+										onClick={() => {
+											const inputEl = document.createElement("input");
+											inputEl.type = "file";
+											inputEl.accept = "image/*";
+											inputEl.addEventListener(
+												"change",
+												() => {
+													const file = inputEl.files?.[0];
+													if (!file) return;
+													db.playlists.update(Number(param.id), (obj) => {
+														obj.playlistCover = file;
+													});
+												},
+												{
+													once: true,
+												},
+											);
+											inputEl.click();
+										}}
+									>
+										<Trans i18nKey="page.playlist.cover.uploadCoverImage">
+											上传封面图片
+										</Trans>
+									</ContextMenu.Item>
+								</ContextMenu.Content>
+							</ContextMenu.Root>
 						</motion.div>
 						<Flex
 							direction="column"
-							gap="4"
 							display={{
 								initial: "none",
 								sm: "flex",
 							}}
+							gap={playlistInfoGapSize.get()}
+							asChild
 						>
-							<EditablePlaylistName
-								playlistName={playlist?.name || ""}
-								onPlaylistNameChange={(newName) =>
-									db.playlists.update(Number(param.id), (obj) => {
-										obj.name = newName;
-									})
-								}
-							/>
-							<Text>
-								{t(
-									"page.playlist.totalMusicLabel",
-									"{count, plural, other {#}} 首歌曲",
-									{
-										count: playlist?.songIds?.length || 0,
-									},
-								)}
-							</Text>
-							<Flex gap="2">
-								<Button onClick={onPlaylistDefault}>
-									<PlayIcon />
-									<Trans i18nKey="page.playlist.playAll">播放全部</Trans>
-								</Button>
-								<Button variant="soft" onClick={onPlaylistShuffle}>
-									<Trans i18nKey="page.playlist.shufflePlayAll">随机播放</Trans>
-								</Button>
-								<Button variant="soft" onClick={onAddLocalMusics}>
-									<PlusIcon />
-									<Trans i18nKey="page.playlist.addLocalMusic.label">
-										添加本地歌曲
-									</Trans>
-								</Button>
-							</Flex>
+							<motion.div
+								style={{
+									gap: playlistInfoGapSize,
+								}}
+							>
+								<EditablePlaylistName
+									playlistName={playlist?.name || ""}
+									onPlaylistNameChange={(newName) =>
+										db.playlists.update(Number(param.id), (obj) => {
+											obj.name = newName;
+										})
+									}
+								/>
+								<Text>
+									{t(
+										"page.playlist.totalMusicLabel",
+										"{count, plural, other {#}} 首歌曲",
+										{
+											count: playlist?.songIds?.length || 0,
+										},
+									)}
+								</Text>
+								<Flex gap="2">
+									<Button onClick={onPlaylistDefault}>
+										<PlayIcon />
+										<Trans i18nKey="page.playlist.playAll">播放全部</Trans>
+									</Button>
+									<Button variant="soft" onClick={onPlaylistShuffle}>
+										<Trans i18nKey="page.playlist.shufflePlayAll">
+											随机播放
+										</Trans>
+									</Button>
+									<Button variant="soft" onClick={onAddLocalMusics}>
+										<PlusIcon />
+										<Trans i18nKey="page.playlist.addLocalMusic.label">
+											添加本地歌曲
+										</Trans>
+									</Button>
+								</Flex>
+							</motion.div>
 						</Flex>
 						<Flex
 							direction="column"
-							gap="4"
 							display={{
 								xs: "flex",
 								sm: "none",
 							}}
+							asChild
 						>
-							<EditablePlaylistName
-								playlistName={playlist?.name || ""}
-								onPlaylistNameChange={(newName) =>
-									db.playlists.update(Number(param.id), (obj) => {
-										obj.name = newName;
-									})
-								}
-							/>
-							<Text>
-								{t(
-									"page.playlist.totalMusicLabel",
-									"{count, plural, other {#}} 首歌曲",
-									{
-										count: playlist?.songIds?.length || 0,
-									},
-								)}
-							</Text>
-							<Flex gap="2">
-								<IconButton onClick={onPlaylistDefault}>
-									<PlayIcon />
-								</IconButton>
-								<IconButton variant="soft" onClick={onAddLocalMusics}>
-									<PlusIcon />
-								</IconButton>
-							</Flex>
+							<motion.div
+								animate={{
+									gap: playlistInfoGapSize,
+								}}
+							>
+								<EditablePlaylistName
+									playlistName={playlist?.name || ""}
+									onPlaylistNameChange={(newName) =>
+										db.playlists.update(Number(param.id), (obj) => {
+											obj.name = newName;
+										})
+									}
+								/>
+								<Text>
+									{t(
+										"page.playlist.totalMusicLabel",
+										"{count, plural, other {#}} 首歌曲",
+										{
+											count: playlist?.songIds?.length || 0,
+										},
+									)}
+								</Text>
+								<Flex gap="2">
+									<IconButton onClick={onPlaylistDefault}>
+										<PlayIcon />
+									</IconButton>
+									<IconButton variant="soft" onClick={onAddLocalMusics}>
+										<PlusIcon />
+									</IconButton>
+								</Flex>
+							</motion.div>
 						</Flex>
 					</Flex>
 				</Flex>
 				<Box
 					flexGrow="1"
-					overflowY="scroll"
+					overflowY="auto"
 					minHeight="0"
 					ref={playlistViewRef}
 					style={{
@@ -532,6 +603,7 @@ export const Component: FC = () => {
 						>
 							{(songId, index) => (
 								<SongCard
+									key={`playlist-song-card-${songId}`}
 									songId={songId}
 									songIndex={index}
 									onPlayList={onPlayList}

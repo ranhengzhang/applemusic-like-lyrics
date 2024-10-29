@@ -5,6 +5,7 @@ import Dexie from "dexie";
 export interface Playlist {
 	id: number;
 	name: string;
+	playlistCover?: Blob;
 	createTime: number;
 	updateTime: number;
 	playTime: number;

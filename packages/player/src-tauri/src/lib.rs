@@ -5,7 +5,10 @@ use serde_json::Value;
 use std::sync::RwLock;
 use std::{net::SocketAddr, path::Path};
 use symphonia::core::io::{MediaSourceStream, MediaSourceStreamOptions};
-use tauri::{AppHandle, Manager, PhysicalSize, Runtime, Size, State, Theme, WebviewWindowBuilder};
+use tauri::{
+    utils::config::WindowEffectsConfig, window::Effect, AppHandle, Manager, PhysicalSize, Runtime,
+    Size, State, Theme, WebviewWindowBuilder,
+};
 use tauri_plugin_fs::OpenOptions;
 use tracing::*;
 
@@ -144,6 +147,20 @@ fn recreate_window(app: &AppHandle) {
     let win = win
         .center()
         .inner_size(800.0, 600.0)
+        .effects(WindowEffectsConfig {
+            effects: vec![Effect::Tabbed, Effect::Mica],
+            ..Default::default()
+        })
+        .transparent({
+            #[cfg(target_os = "windows")]
+            {
+                true
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                false
+            }
+        })
         .title({
             #[cfg(target_os = "macos")]
             {

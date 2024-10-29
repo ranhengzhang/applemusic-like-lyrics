@@ -23,13 +23,13 @@ export const AMLLContextMenuContent: FC = () => {
 
 	return (
 		<ContextMenu.Content>
-			<ContextMenu.Item onClick={onRequestPrevSong}>
+			<ContextMenu.Item onClick={onRequestPrevSong} shortcut="Ctrl Alt ←">
 				<Trans i18nKey="amll.contextMenu.rewindSong">上一首</Trans>
 			</ContextMenu.Item>
-			<ContextMenu.Item onClick={onPlayOrResume}>
+			<ContextMenu.Item onClick={onPlayOrResume} shortcut="Ctrl Alt P">
 				<Trans i18nKey="amll.contextMenu.pauseOrResume">暂停 / 继续</Trans>
 			</ContextMenu.Item>
-			<ContextMenu.Item onClick={onRequestNextSong}>
+			<ContextMenu.Item onClick={onRequestNextSong} shortcut="Ctrl Alt →">
 				<Trans i18nKey="amll.contextMenu.forwardSong">下一首</Trans>
 			</ContextMenu.Item>
 			<ContextMenu.Separator />

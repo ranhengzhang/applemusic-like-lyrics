@@ -3,7 +3,6 @@ import {
 	Box,
 	Button,
 	type ButtonProps,
-	Container,
 	Flex,
 	Separator,
 	Tooltip,
@@ -11,6 +10,7 @@ import {
 import { atom, useAtom, useAtomValue } from "jotai";
 import { type FC, Suspense } from "react";
 import { useTranslation } from "react-i18next";
+import { PageContainer } from "../../components/PageContainer/index.tsx";
 import { loadedExtensionAtom } from "../../states/extension.ts";
 import AMLLPlayerSettingIcon from "./amll-player-setting.svg?react";
 import ExtensionManageIcon from "./extension-manage.svg?react";
@@ -44,15 +44,9 @@ export const Component: FC = () => {
 
 	return (
 		<>
-			<Container
-				mx={{
-					initial: "4",
-					sm: "9",
-				}}
-				mb="150px"
-			>
-				<Flex direction="row" mt="7" gap="4">
-					<Box>
+			<PageContainer>
+				<Flex direction="row" gap="4" height="100%">
+					<Box mt="7">
 						<TabButton
 							variant="soft"
 							content={t("common.page.back", "返回")}
@@ -89,7 +83,7 @@ export const Component: FC = () => {
 							);
 						})}
 					</Box>
-					<Box flexGrow="1" minWidth="0">
+					<Box flexGrow="1" minWidth="0" overflowY="auto" minHeight="0">
 						{currentPage === "amll-player" && <PlayerSettingsTab />}
 						{currentPage === "extension" && (
 							<Suspense>
@@ -107,7 +101,7 @@ export const Component: FC = () => {
 						})}
 					</Box>
 				</Flex>
-			</Container>
+			</PageContainer>
 		</>
 	);
 };

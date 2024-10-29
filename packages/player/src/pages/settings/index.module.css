@@ -2,6 +2,14 @@
 	white-space: pre-wrap;
 }
 
+.container {
+	max-width: 800px;
+	margin: auto;
+	overflow: hidden;
+	min-height: 0;
+	height: 100%;
+}
+
 .tabButton {
 	display: flex;
 	align-items: center;

@@ -36,7 +36,7 @@ export const ExtensionTab: FC = () => {
 
 	return (
 		<>
-			<Callout.Root color="red" my="2">
+			<Callout.Root color="red" my="2" mt="7">
 				<Callout.Icon>
 					<ExclamationTriangleIcon />
 				</Callout.Icon>
@@ -85,6 +85,7 @@ export const ExtensionTab: FC = () => {
 							filters,
 							multiple: true,
 						});
+						console.log("获取到的插件文件", extensionFiles);
 						if (extensionFiles === null) return;
 						if (extensionFiles.length === 0) return;
 
@@ -129,7 +130,7 @@ export const ExtensionTab: FC = () => {
 			</Flex>
 			{extensionMetas.map((meta) => (
 				<Card key={`${meta.fileName}-${meta.id}`} my="2">
-					<Flex align="center" gap="4">
+					<Flex align="center" gap="4" wrap="wrap">
 						<Avatar
 							size="5"
 							fallback={<div />}

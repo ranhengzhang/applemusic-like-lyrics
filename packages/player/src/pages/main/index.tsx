@@ -3,7 +3,6 @@ import {
 	Badge,
 	Box,
 	Card,
-	Container,
 	ContextMenu,
 	DropdownMenu,
 	Flex,
@@ -20,6 +19,7 @@ import { Link } from "react-router-dom";
 import { ViewportList } from "react-viewport-list";
 import { ExtensionInjectPoint } from "../../components/ExtensionInjectPoint/index.tsx";
 import { NewPlaylistButton } from "../../components/NewPlaylistButton/index.tsx";
+import { PageContainer } from "../../components/PageContainer/index.tsx";
 import { PlaylistCover } from "../../components/PlaylistCover/index.tsx";
 import { db } from "../../dexie.ts";
 import { router } from "../../router.tsx";
@@ -31,19 +31,8 @@ export const Component: FC = () => {
 	const viewportRef = useRef<HTMLDivElement>(null);
 
 	return (
-		<Container
-			mx={{
-				initial: "4",
-				sm: "9",
-			}}
-		>
-			<Flex
-				direction="column"
-				style={{
-					overflow: "hidden",
-					height: "100vh",
-				}}
-			>
+		<PageContainer>
+			<Flex direction="column" height="100%">
 				<Flex direction="row" align="center" wrap="wrap" mt="5">
 					<Box asChild flexGrow="1">
 						<Heading wrap="nowrap" my="4">
@@ -119,8 +108,7 @@ export const Component: FC = () => {
 					) : (
 						<div
 							style={{
-								paddingBottom: "var(--amll-player-playbar-bottom)",
-								overflowY: "scroll",
+								overflowY: "auto",
 								minHeight: "0",
 							}}
 							ref={viewportRef}
@@ -167,7 +155,7 @@ export const Component: FC = () => {
 				)}
 				<ExtensionInjectPoint injectPointName="page.main.bottom" />
 			</Flex>
-		</Container>
+		</PageContainer>
 	);
 };
 

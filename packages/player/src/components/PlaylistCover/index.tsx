@@ -17,7 +17,7 @@ export const PlaylistCover: FC<
 	);
 
 	const firstFourSongs = useLiveQuery(async () => {
-		if (playlist) {
+		if (playlist && !playlist.playlistCover) {
 			const result = [];
 			for (const songId of playlist.songIds) {
 				const song = await db.songs.get(songId);
@@ -32,6 +32,15 @@ export const PlaylistCover: FC<
 	}, [playlist]);
 
 	useEffect(() => {
+		if (playlist?.playlistCover) {
+			const coverUrl = URL.createObjectURL(playlist.playlistCover);
+
+			setPlaylistImgs([coverUrl]);
+
+			return () => {
+				URL.revokeObjectURL(coverUrl);
+			};
+		}
 		if (firstFourSongs) {
 			const imgs = firstFourSongs.map((v) => URL.createObjectURL(v.cover));
 
@@ -43,7 +52,7 @@ export const PlaylistCover: FC<
 				}
 			};
 		}
-	}, [firstFourSongs]);
+	}, [firstFourSongs, playlist]);
 
 	return (
 		<div

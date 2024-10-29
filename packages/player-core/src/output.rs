@@ -168,15 +168,15 @@ fn get_buffer_format(decoded: &symphonia::core::audio::AudioBufferRef<'_>) -> &'
 #[instrument(skip(output))]
 fn init_audio_stream_inner<T: AudioOutputSample + Into<f64>>(
     output: Device,
+    ring_buf_size_ms: usize,
     selected_config: StreamConfig,
 ) -> Box<dyn AudioOutput> {
     let channels = selected_config.channels;
-    const RING_BUF_SIZE_MS: usize = 50;
     let ring_len =
-        ((RING_BUF_SIZE_MS * selected_config.sample_rate.0 as usize) / 1000) * channels as usize;
+        ((ring_buf_size_ms * selected_config.sample_rate.0 as usize) / 1000) * channels as usize;
     info!(
         "音频输出流环缓冲区大小为 {} 个样本（约为 {}ms 的缓冲）",
-        ring_len, RING_BUF_SIZE_MS
+        ring_len, ring_buf_size_ms
     );
     let ring = rb::SpscRb::<T>::new(ring_len);
     let prod = ring.producer();
@@ -244,7 +244,11 @@ fn get_sample_format_quality_level(sample_format: SampleFormat) -> u8 {
 }
 
 #[instrument]
-pub fn init_audio_player(output_device_name: &str) -> anyhow::Result<Box<dyn AudioOutput>> {
+pub fn init_audio_player(
+    output_device_name: &str,
+    ring_buf_size_ms: Option<usize>,
+) -> anyhow::Result<Box<dyn AudioOutput>> {
+    let ring_buf_size_ms = ring_buf_size_ms.unwrap_or(100);
     let host = cpal::default_host();
     let output = if output_device_name.is_empty() {
         host.default_output_device().context("找不到默认输出设备")?
@@ -292,16 +296,32 @@ pub fn init_audio_player(output_device_name: &str) -> anyhow::Result<Box<dyn Aud
     );
 
     Ok((match selected_sample_format {
-        SampleFormat::I8 => init_audio_stream_inner::<i8>(output, selected_config),
-        SampleFormat::I16 => init_audio_stream_inner::<i16>(output, selected_config),
-        SampleFormat::I32 => init_audio_stream_inner::<i32>(output, selected_config),
-        // SampleFormat::I64 => init_audio_stream_inner::<i64>(output, selected_config),
-        SampleFormat::U8 => init_audio_stream_inner::<u8>(output, selected_config),
-        SampleFormat::U16 => init_audio_stream_inner::<u16>(output, selected_config),
-        SampleFormat::U32 => init_audio_stream_inner::<u32>(output, selected_config),
-        // SampleFormat::U64 => init_audio_stream_inner::<u64>(output, selected_config),
-        SampleFormat::F32 => init_audio_stream_inner::<f32>(output, selected_config),
-        SampleFormat::F64 => init_audio_stream_inner::<f64>(output, selected_config),
+        SampleFormat::I8 => {
+            init_audio_stream_inner::<i8>(output, ring_buf_size_ms, selected_config)
+        }
+        SampleFormat::I16 => {
+            init_audio_stream_inner::<i16>(output, ring_buf_size_ms, selected_config)
+        }
+        SampleFormat::I32 => {
+            init_audio_stream_inner::<i32>(output, ring_buf_size_ms, selected_config)
+        }
+        // SampleFormat::I64 => init_audio_stream_inner::<i64>(output, ring_buf_size_ms, selected_config),
+        SampleFormat::U8 => {
+            init_audio_stream_inner::<u8>(output, ring_buf_size_ms, selected_config)
+        }
+        SampleFormat::U16 => {
+            init_audio_stream_inner::<u16>(output, ring_buf_size_ms, selected_config)
+        }
+        SampleFormat::U32 => {
+            init_audio_stream_inner::<u32>(output, ring_buf_size_ms, selected_config)
+        }
+        // SampleFormat::U64 => init_audio_stream_inner::<u64>(output, ring_buf_size_ms, selected_config),
+        SampleFormat::F32 => {
+            init_audio_stream_inner::<f32>(output, ring_buf_size_ms, selected_config)
+        }
+        SampleFormat::F64 => {
+            init_audio_stream_inner::<f64>(output, ring_buf_size_ms, selected_config)
+        }
         _ => unreachable!(),
     }) as _)
 }
@@ -339,6 +359,7 @@ impl AsAudioBufferRef for OwnedAudioBuffer {
 enum AudioOutputMessage {
     ClearBuffer,
     ChangeOutput(String),
+    ChangeRingBufSize(usize),
     SetVolume(f64),
 }
 
@@ -421,7 +442,9 @@ pub fn create_audio_output_thread() -> AudioOutputSender {
     });
     let handle_c = handle.clone();
     handle.spawn_blocking(move || {
-        let mut output = init_audio_player("").ok();
+        let mut output_name = "".to_string();
+        let mut ring_buf_size_ms = None;
+        let mut output = init_audio_player(&output_name, ring_buf_size_ms).ok();
         let mut current_volume = 0.5;
         if let Some(output) = &mut output {
             output.set_volume(current_volume);
@@ -451,13 +474,14 @@ pub fn create_audio_output_thread() -> AudioOutputSender {
                     if let Some(output) = &mut output {
                         if output.is_dead() {
                             should_recrate = true;
+                            output_name = "".to_string();
                             info!("现有输出设备已断开，正在重新初始化播放器");
                         } else {
                             output.write(pcm.as_audio_buffer_ref());
                         }
                     }
                     if should_recrate {
-                        output = init_audio_player("").ok();
+                        output = init_audio_player("", None).ok();
                         if let Some(output) = &mut output {
                             output.set_volume(current_volume);
                             output.stream().play().unwrap();
@@ -465,16 +489,32 @@ pub fn create_audio_output_thread() -> AudioOutputSender {
                     }
                 }
                 Some(PollResult::Msg(msg)) => match msg {
-                    AudioOutputMessage::ChangeOutput(output_name) => {
-                        match init_audio_player(&output_name) {
+                    AudioOutputMessage::ChangeOutput(new_output_name) => {
+                        match init_audio_player(&new_output_name, ring_buf_size_ms) {
                             Ok(mut new_output) => {
+                                output_name = new_output_name;
                                 new_output.set_volume(current_volume);
                                 new_output.stream().play().unwrap();
                                 output = Some(new_output);
                                 info!("已切换输出设备")
                             }
                             Err(err) => {
-                                warn!("无法切换到输出设备 {output_name}: {err}");
+                                warn!("无法切换到输出设备 {new_output_name}: {err}");
+                                output = None;
+                            }
+                        }
+                    }
+                    AudioOutputMessage::ChangeRingBufSize(new_size) => {
+                        match init_audio_player(&output_name, Some(new_size)) {
+                            Ok(mut new_output) => {
+                                ring_buf_size_ms = Some(new_size);
+                                new_output.set_volume(current_volume);
+                                new_output.stream().play().unwrap();
+                                output = Some(new_output);
+                                info!("已切换输出设备（设置回环流大小）")
+                            }
+                            Err(err) => {
+                                warn!("无法切换到输出设备（设置回环流大小） {output_name}: {err}");
                                 output = None;
                             }
                         }
