@@ -140,6 +140,8 @@ fn recreate_window(app: &AppHandle) {
     #[cfg(not(debug_assertions))]
     let url = tauri::WebviewUrl::App("index.html".into());
     let win: WebviewWindowBuilder<'_, _, _> = WebviewWindowBuilder::new(app, "main", url);
+    #[cfg(target_os = "windows")]
+    let win = win.transparent(true);
     #[cfg(not(desktop))]
     let win = win;
 
@@ -150,16 +152,6 @@ fn recreate_window(app: &AppHandle) {
         .effects(WindowEffectsConfig {
             effects: vec![Effect::Tabbed, Effect::Mica],
             ..Default::default()
-        })
-        .transparent({
-            #[cfg(target_os = "windows")]
-            {
-                true
-            }
-            #[cfg(not(target_os = "windows"))]
-            {
-                false
-            }
         })
         .title({
             #[cfg(target_os = "macos")]

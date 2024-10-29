@@ -20,9 +20,7 @@ export const AudioQualityDialog: FC = () => {
 		>
 			<Dialog.Content width="fit-content">
 				<Dialog.Title>
-					<Trans>
-						<Trans i18nKey="amll.audioQuality.title">音频解码信息</Trans>
-					</Trans>
+					<Trans i18nKey="amll.audioQuality.title">音频解码信息</Trans>
 				</Dialog.Title>
 				<Separator size="4" my="3" />
 				<DataList.Root>
