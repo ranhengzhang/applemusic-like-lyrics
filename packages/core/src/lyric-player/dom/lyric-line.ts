@@ -369,7 +369,9 @@ export class LyricLineEl extends LyricLineBase {
 						word: "",
 						startTime: Number.POSITIVE_INFINITY,
 						endTime: Number.NEGATIVE_INFINITY,
-					},
+						wordType: "normal",
+						obscene: false,
+					} as LyricWord,
 				);
 				const emp = chunk
 					.map((word) => LyricLineBase.shouldEmphasize(word))

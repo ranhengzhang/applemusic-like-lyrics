@@ -13,7 +13,6 @@
 	width: 100%;
 	height: fit-content;
 	padding: 2vh 1em;
-	padding-right: 20%;
 	contain: content;
 	will-change: transform;
 	transition: filter 0.2s, background-color 0.25s, box-shadow 0.25s;
@@ -47,11 +46,20 @@
 	}
 }
 
+:global(.amll-lyric-player):has(> .lyricDuetLine) {
+	.lyricLine {
+		padding-left: 1em;
+		padding-right: 15%;
+	}
+	.lyricDuetLine {
+		padding-left: 15%;
+		padding-right: 1em;
+	}
+}
+
 .lyricDuetLine {
 	text-align: right;
 	transform-origin: right;
-	padding-left: 20%;
-	padding-right: 1em;
 }
 
 .lyricMainLine {

@@ -8,6 +8,7 @@ import type {
 import styles from "../styles/lyric-player.module.css";
 import { debounceFrame } from "../utils/debounce";
 import { eqSet } from "../utils/eq-set";
+import { isCJK } from "../utils/is-cjk.js";
 import { Spring, type SpringParams } from "../utils/spring";
 import { BottomLineEl } from "./bottom-line";
 import { InterludeDots } from "./dom/interlude-dots";
@@ -918,6 +919,8 @@ export abstract class LyricLineBase extends EventTarget implements Disposable {
 	 * @returns 是否可以应用强调辉光效果
 	 */
 	static shouldEmphasize(word: LyricWord): boolean {
+		if (isCJK(word.word)) return word.endTime - word.startTime >= 1000;
+
 		return (
 			word.endTime - word.startTime >= 1000 &&
 			word.word.trim().length <= 7 &&

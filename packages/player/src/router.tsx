@@ -3,11 +3,16 @@ import {
 	createBrowserRouter,
 	createRoutesFromElements,
 } from "react-router-dom";
+import ErrorPage from "./pages/error/index.tsx";
 
 export const router = createBrowserRouter(
 	createRoutesFromElements(
 		<>
-			<Route path="/" lazy={() => import("./pages/main")} />
+			<Route
+				path="/"
+				lazy={() => import("./pages/main")}
+				errorElement={<ErrorPage />}
+			/>
 			<Route path="/settings" lazy={() => import("./pages/settings")} />
 			<Route path="/playlist/:id" lazy={() => import("./pages/playlist")} />
 			<Route path="/song/:id" lazy={() => import("./pages/song")} />
