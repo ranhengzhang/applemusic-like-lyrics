@@ -1,5 +1,6 @@
 import type { Disposable, HasElement } from "../interfaces";
 import styles from "../styles/lyric-player.module.css";
+import { measure } from "../utils/schedule.js";
 import { Spring } from "../utils/spring";
 import type { LyricPlayerBase } from "./base";
 
@@ -18,11 +19,11 @@ export class BottomLineEl implements HasElement, Disposable {
 		this.element.setAttribute("class", styles.lyricLine);
 		this.rebuildStyle();
 	}
-	measureSize(): [number, number] {
-		const size: [number, number] = [
+	async measureSize(): Promise<[number, number]> {
+		const size: [number, number] = await measure(() => [
 			this.element.clientWidth,
 			this.element.clientHeight,
-		];
+		]);
 		return size;
 	}
 	private lastStyle = "";

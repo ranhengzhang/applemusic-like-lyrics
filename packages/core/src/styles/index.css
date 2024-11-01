@@ -20,10 +20,6 @@
 		box-sizing: content-box;
 		z-index: 1;
 		line-height: 1.2em;
-
-		&:hover .lyric-line {
-			filter: unset !important;
-		}
 	}
 }
 

@@ -90,7 +90,6 @@ export class CanvasLyricLine extends LyricLineBase {
 	override resume(): void {}
 	override pause(): void {}
 	override setTransform(
-		left = this.left,
 		top = this.top,
 		scale = this.scale,
 		opacity = this.opacity,
@@ -103,26 +102,21 @@ export class CanvasLyricLine extends LyricLineBase {
 		this.blur = targetBlur;
 		this.opacity = opacity;
 		if (force) {
-			this.lineTransforms.posX.setPosition(left);
 			this.lineTransforms.posY.setPosition(top);
 			this.lineTransforms.scale.setPosition(scale);
 		} else {
-			this.lineTransforms.posX.setTargetPosition(left, delay);
 			this.lineTransforms.posY.setTargetPosition(top, delay);
 			this.lineTransforms.scale.setTargetPosition(scale);
 		}
 	}
 	get isInSight() {
-		const l = this.lineTransforms.posX.getCurrentPosition();
 		const t = this.lineTransforms.posY.getCurrentPosition();
-		const r = l + this.lineSize[0];
+		const r = this.lineSize[0];
 		const b = t + this.lineSize[1];
-		const pr = this.player.size[0];
 		const pb = this.player.size[1];
-		return !(l > pr || t > pb || r < 0 || b < 0);
+		return !(t > pb || r < 0 || b < 0);
 	}
 	override update(delta?: number): void {
-		this.lineTransforms.posX.update(delta);
 		this.lineTransforms.posY.update(delta);
 		this.lineTransforms.scale.update(delta);
 		if (!this.isInSight) return;
@@ -132,10 +126,7 @@ export class CanvasLyricLine extends LyricLineBase {
 		ctx.filter = `blur(${this.blur}px)`;
 		ctx.textRendering = "geometricPrecision";
 		this.player.setFontSize(1);
-		ctx.translate(
-			this.lineTransforms.posX.getCurrentPosition(),
-			this.lineTransforms.posY.getCurrentPosition(),
-		);
+		ctx.translate(0, this.lineTransforms.posY.getCurrentPosition());
 		const scale = this.lineTransforms.scale.getCurrentPosition() / 100;
 		ctx.scale(scale, scale);
 		ctx.globalAlpha = this.opacity * (this.enabled ? 1 : 0.5);

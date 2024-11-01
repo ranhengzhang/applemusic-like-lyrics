@@ -6,7 +6,6 @@ import type {
 	LyricWord,
 } from "../interfaces";
 import styles from "../styles/lyric-player.module.css";
-import { debounceFrame } from "../utils/debounce";
 import { eqSet } from "../utils/eq-set";
 import { isCJK } from "../utils/is-cjk.js";
 import { Spring, type SpringParams } from "../utils/spring";
@@ -81,17 +80,12 @@ export abstract class LyricPlayerBase
 	private scrolledHandler = 0;
 	protected isScrolled = false;
 
-	resizeObserver: ResizeObserver = new ResizeObserver(
-		debounceFrame(
-			((e) => {
-				const rect = e[0].contentRect;
-				this.size[0] = rect.width;
-				this.size[1] = rect.height;
-				this.onResize();
-			}) as ResizeObserverCallback,
-			5,
-		),
-	);
+	resizeObserver: ResizeObserver = new ResizeObserver(((e) => {
+		const rect = e[0].contentRect;
+		this.size[0] = rect.width;
+		this.size[1] = rect.height;
+		this.onResize();
+	}) as ResizeObserverCallback);
 	protected wordFadeWidth = 0.5;
 
 	constructor() {
@@ -593,17 +587,22 @@ export abstract class LyricPlayerBase
 	 * @param force 是否不经过动画直接修改布局定位
 	 * @param reflow 是否进行重新布局（重新计算每行歌词大小）
 	 */
-	calcLayout(force?: boolean, reflow?: boolean) {
+	async calcLayout(force?: boolean, reflow?: boolean) {
 		if (reflow) {
-			// this.emUnit = Number.parseFloat(getComputedStyle(this.element).fontSize);
-			for (const lineObj of this.currentLyricLineObjects) {
-				const size: [number, number] = lineObj.measureSize();
-				this.lyricLinesSize.set(lineObj, size);
+			if (import.meta.env.DEV) {
+				console.log("calcLayout with reflow");
 			}
+			// this.emUnit = Number.parseFloat(getComputedStyle(this.element).fontSize);
+			await Promise.all(
+				this.currentLyricLineObjects.map(async (lineObj) => {
+					const size: [number, number] = await lineObj.measureSize();
+					this.lyricLinesSize.set(lineObj, size);
+				}),
+			);
 			this.interludeDotsSize[0] = this.interludeDots.getElement().clientWidth;
 			this.interludeDotsSize[1] = this.interludeDots.getElement().clientHeight;
 
-			this.bottomLine.lineSize = this.bottomLine.measureSize();
+			this.bottomLine.lineSize = await this.bottomLine.measureSize();
 		}
 		const interlude = this.getCurrentInterlude();
 		let curPos = -this.scrollOffset;
@@ -654,10 +653,6 @@ export abstract class LyricPlayerBase
 			const isActive =
 				hasBuffered || (i >= this.scrollToIndex && i < latestIndex);
 			const line = lineObj.getLine();
-			const left = 0;
-			// if (line.isDuet) {
-			// 	left = this.size[0] - (this.lyricLinesSize.get(lineObj)?.[0] ?? 0);
-			// }
 			if (
 				!setDots &&
 				interludeDuration >= 4000 &&
@@ -708,7 +703,6 @@ export abstract class LyricPlayerBase
 			const SCALE_ASPECT = this.enableScale ? 97 : 100;
 
 			lineObj.setTransform(
-				left,
 				curPos,
 				isActive ? 100 : line.isBG ? 75 : SCALE_ASPECT,
 				targetOpacity,
@@ -743,17 +737,9 @@ export abstract class LyricPlayerBase
 	 * 设置所有歌词行在横坐标上的弹簧属性，包括重量、弹力和阻力。
 	 *
 	 * @param params 需要设置的弹簧属性，提供的属性将会覆盖原来的属性，未提供的属性将会保持原样
+	 * @deprecated 考虑到横向弹簧效果并不常见，所以这个函数将会在未来的版本中移除
 	 */
-	setLinePosXSpringParams(params: Partial<SpringParams> = {}) {
-		this.posXSpringParams = {
-			...this.posXSpringParams,
-			...params,
-		};
-		this.bottomLine.lineTransforms.posX.updateParams(this.posXSpringParams);
-		for (const line of this.currentLyricLineObjects) {
-			line.lineTransforms.posX.updateParams(this.posXSpringParams);
-		}
-	}
+	setLinePosXSpringParams(_params: Partial<SpringParams> = {}) {}
 	/**
 	 * 设置所有歌词行在​纵坐标上的弹簧属性，包括重量、弹力和阻力。
 	 *
@@ -874,25 +860,22 @@ export abstract class LyricPlayerBase
  * @internal
  */
 export abstract class LyricLineBase extends EventTarget implements Disposable {
-	protected left = 0;
 	protected top = 0;
 	protected scale = 1;
 	protected blur = 0;
 	protected opacity = 1;
 	protected delay = 0;
 	readonly lineTransforms = {
-		posX: new Spring(0),
 		posY: new Spring(0),
 		scale: new Spring(100),
 	};
-	abstract measureSize(): [number, number];
+	abstract measureSize(): PromiseLike<[number, number]> | [number, number];
 	abstract getLine(): LyricLine;
 	abstract enable(): void;
 	abstract disable(): void;
 	abstract resume(): void;
 	abstract pause(): void;
 	setTransform(
-		left: number = this.left,
 		top: number = this.top,
 		scale: number = this.scale,
 		opacity: number = this.opacity,
@@ -900,7 +883,6 @@ export abstract class LyricLineBase extends EventTarget implements Disposable {
 		_force = false,
 		delay = 0,
 	) {
-		this.left = left;
 		this.top = top;
 		this.scale = scale;
 		this.opacity = opacity;

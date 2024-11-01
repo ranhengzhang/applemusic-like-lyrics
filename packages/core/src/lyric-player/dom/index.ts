@@ -7,7 +7,6 @@
 import type { LyricLine } from "../../interfaces";
 import "../../styles/index.css";
 import styles from "../../styles/lyric-player.module.css";
-import { debounceFrame } from "../../utils/debounce";
 import { LyricPlayerBase } from "../base";
 import { LyricLineEl, type RawLyricLineMouseEvent } from "./lyric-line";
 
@@ -39,42 +38,31 @@ export type LyricLineMouseEventListener = (evt: LyricLineMouseEvent) => void;
  */
 export class DomLyricPlayer extends LyricPlayerBase {
 	override currentLyricLineObjects: LyricLineEl[] = [];
-	private debounceCalcLayout = debounceFrame(async () => {
-		this.calcLayout(true, true);
-		this.currentLyricLineObjects.forEach((el, i) => {
-			el.markMaskImageDirty().then(() => {
-				if (this.hotLines.has(i)) {
-					el.enable(this.currentTime);
-				}
-			});
-		});
-	}, 5);
 
 	override onResize(): void {
-		const styles = getComputedStyle(this.element);
-		this._baseFontSize = Number.parseFloat(styles.fontSize);
+		const computedStyles = getComputedStyle(this.element);
+		this._baseFontSize = Number.parseFloat(computedStyles.fontSize);
 		const innerWidth =
 			this.element.clientWidth -
-			Number.parseFloat(styles.paddingLeft) -
-			Number.parseFloat(styles.paddingRight);
+			Number.parseFloat(computedStyles.paddingLeft) -
+			Number.parseFloat(computedStyles.paddingRight);
 		const innerHeight =
 			this.element.clientHeight -
-			Number.parseFloat(styles.paddingTop) -
-			Number.parseFloat(styles.paddingBottom);
+			Number.parseFloat(computedStyles.paddingTop) -
+			Number.parseFloat(computedStyles.paddingBottom);
 		this.innerSize[0] = innerWidth;
 		this.innerSize[1] = innerHeight;
 		this.rebuildStyle();
-		this.currentLyricLineObjects.forEach((el, i) => {
-			el.markMaskImageDirty().then(() => {
+		this.calcLayout(true, true).then(() =>
+			this.currentLyricLineObjects.map(async (el, i) => {
+				el.markMaskImageDirty("DomLyricPlayer onResize");
+				await el.waitMaskImageUpdated();
 				if (this.hotLines.has(i)) {
 					el.enable(this.currentTime);
+					el.resume();
 				}
-			});
-		});
-		for (const el of this.currentLyricLineObjects) {
-			el.markMaskImageDirty();
-		}
-		this.debounceCalcLayout();
+			}),
+		);
 	}
 
 	readonly supportPlusLighter = CSS.supports("mix-blend-mode", "plus-lighter");
@@ -127,7 +115,7 @@ export class DomLyricPlayer extends LyricPlayerBase {
 	override setWordFadeWidth(value = 0.5) {
 		super.setWordFadeWidth(value);
 		for (const el of this.currentLyricLineObjects) {
-			el.markMaskImageDirty();
+			el.markMaskImageDirty("DomLyricPlayer setWordFadeWidth");
 		}
 	}
 
@@ -138,6 +126,9 @@ export class DomLyricPlayer extends LyricPlayerBase {
 	 */
 	override setLyricLines(lines: LyricLine[], initialTime = 0) {
 		super.setLyricLines(lines, initialTime);
+		if (!this.isNonDynamic) {
+			this.element.classList.add(styles.hasDuetLine);
+		}
 
 		for (const line of this.currentLyricLineObjects) {
 			line.removeMouseEventListener("click", this.onLineClickedHandler);
@@ -152,7 +143,7 @@ export class DomLyricPlayer extends LyricPlayerBase {
 			lineEl.addMouseEventListener("contextmenu", this.onLineClickedHandler);
 			this.element.appendChild(lineEl.getElement());
 			this.lyricLinesIndexes.set(lineEl, i);
-			lineEl.markMaskImageDirty();
+			lineEl.markMaskImageDirty("DomLyricPlayer setLyricLines");
 			return lineEl;
 		});
 

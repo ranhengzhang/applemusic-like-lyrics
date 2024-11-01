@@ -4,6 +4,7 @@ import type { LyricLine, LyricWord } from "../../interfaces";
 import styles from "../../styles/lyric-player.module.css";
 import { chunkAndSplitLyricWords } from "../../utils/lyric-split-words";
 import { createMatrix4, matrix4ToCSS, scaleMatrix4 } from "../../utils/matrix";
+import { mutexifyFunction } from "../../utils/mutex.js";
 import { measure, mutate } from "../../utils/schedule";
 import { LyricLineBase } from "../base";
 
@@ -119,6 +120,7 @@ export class LyricLineEl extends LyricLineBase {
 		roman.setAttribute("class", styles.lyricSubLine);
 		this.rebuildElement();
 		this.rebuildStyle();
+		this.markMaskImageDirty("Initial construction");
 	}
 	private listenersMap = new Map<string, Set<MouseEventListener>>();
 	private readonly onMouseEvent = (e: MouseEvent) => {
@@ -222,7 +224,8 @@ export class LyricLineEl extends LyricLineBase {
 		main.classList.remove(styles.active);
 	}
 	private lastWord?: RealWord;
-	resume() {
+	async resume() {
+		await this.waitMaskImageUpdated();
 		if (!this.isEnabled) return;
 		for (const word of this.splittedWords) {
 			for (const a of word.elementAnimations) {
@@ -245,7 +248,8 @@ export class LyricLineEl extends LyricLineBase {
 			}
 		}
 	}
-	pause() {
+	async pause() {
+		await this.waitMaskImageUpdated();
 		if (!this.isEnabled) return;
 		for (const word of this.splittedWords) {
 			for (const a of word.elementAnimations) {
@@ -267,66 +271,72 @@ export class LyricLineEl extends LyricLineBase {
 			}
 		}
 	}
-	measureSize(): [number, number] {
-		if (this._hide) {
-			if (this._prevParentEl) {
-				this._prevParentEl.appendChild(this.element);
+	private measureLockMark = false;
+	private measureLock = mutexifyFunction(
+		async (callback: () => Promise<void>): Promise<void> => {
+			if (this.measureLockMark) return;
+			this.measureLockMark = true;
+			if (this._hide) {
+				await mutate(() => {
+					this._prevParentEl.appendChild(this.element);
+					this.element.style.display = "";
+					this.element.style.visibility = "hidden";
+				});
 			}
-			this.element.style.display = "";
-			this.element.style.visibility = "hidden";
-		}
-		const size: [number, number] = [
-			this.element.clientWidth,
-			this.element.clientHeight,
-		];
-		if (this._hide) {
-			if (this._prevParentEl) {
-				this.element.remove();
+			await callback();
+			if (this._hide) {
+				await mutate(() => {
+					this._prevParentEl.removeChild(this.element);
+					this.element.style.display = "none";
+					this.element.style.visibility = "";
+				});
 			}
-			this.element.style.display = "none";
-			this.element.style.visibility = "";
-		}
-		this.lineSize = size;
-		return size;
+			this.measureLockMark = false;
+		},
+	);
+	async measureSize(): Promise<[number, number]> {
+		await this.measureLock(async () => {
+			const size: [number, number] = await measure(() => [
+				this.element.clientWidth,
+				this.element.clientHeight,
+			]);
+			if (import.meta.env.DEV) {
+				if (size[0] * size[1] === 0) {
+					console.warn(
+						"Zero size detected",
+						this.lyricLine,
+						this.element,
+						this.element.parentElement,
+					);
+				}
+			}
+			this.lineSize = size;
+		});
+		return this.lineSize as [number, number];
 	}
 	getLine() {
 		return this.lyricLine;
 	}
 	private _hide = true;
-	private _prevParentEl: HTMLElement | null = null;
+	private _prevParentEl: HTMLElement;
 	private lastStyle = "";
 	show() {
 		this._hide = false;
-		if (this._prevParentEl) {
+		if (!this.measureLockMark && !this.element.parentElement) {
 			this._prevParentEl.appendChild(this.element);
-			this._prevParentEl = null;
 		}
 		this.rebuildStyle();
 	}
 	hide() {
 		this._hide = true;
-		if (this.element.parentElement) {
-			this._prevParentEl = this.element.parentElement;
-			this.element.remove();
+		if (!this.measureLockMark && this.element.parentElement) {
+			this._prevParentEl.removeChild(this.element);
 		}
-		this.rebuildStyle();
 	}
 	private rebuildStyle() {
-		if (this._hide) {
-			if (this.lastStyle !== "display:none;transform:translate(0,-10000px);") {
-				this.lastStyle = "display:none;transform:translate(0,-10000px);";
-				this.element.setAttribute(
-					"style",
-					"display:none;transform:translate(0,-10000px);",
-				);
-			}
-			return;
-		}
 		let style = "";
 		// if (this.lyricPlayer.getEnableSpring()) {
-		style += `transform:translate(${this.lineTransforms.posX
-			.getCurrentPosition()
-			.toFixed(1)}px,${this.lineTransforms.posY
+		style += `transform:translateY(${this.lineTransforms.posY
 			.getCurrentPosition()
 			.toFixed(
 				1,
@@ -644,65 +654,70 @@ export class LyricLineEl extends LyricLineBase {
 		return this.lyricLine.endTime - this.lyricLine.startTime;
 	}
 	private maskImageDirty = false;
-	private markImageDirtyPromises: (() => void)[] = [];
-	markMaskImageDirty(): Promise<void> {
+	private markImageDirtyPromiseResolve: Set<() => void> = new Set();
+	private markImageDirtyPromise: Promise<void> = new Promise((resolve) => {
+		this.markImageDirtyPromiseResolve.add(resolve);
+	});
+	markMaskImageDirty(_debugReason = ""): Promise<void> {
 		this.maskImageDirty = true;
-		return new Promise((resolve) => {
-			this.markImageDirtyPromises.push(resolve);
-		});
+		if (!this.element.classList.contains(styles.dirty))
+			this.element.classList.add(styles.dirty);
+		// if (import.meta.env.DEV) {
+		// 	console.log("Mark mask image dirty: ", _debugReason);
+		// }
+		const newPromise = Promise.all([
+			this.markImageDirtyPromise,
+			new Promise<void>((resolve) => {
+				this.markImageDirtyPromiseResolve.add(resolve);
+			}),
+		]).then(() => {});
+		this.markImageDirtyPromise = newPromise;
+		return newPromise;
 	}
 	waitMaskImageUpdated(): Promise<void> {
-		if (this.maskImageDirty) {
-			return new Promise((resolve) => {
-				this.markImageDirtyPromises.push(resolve);
-			});
-		}
-		return Promise.resolve();
+		return this.markImageDirtyPromise;
 	}
 	async updateMaskImage() {
-		const resolves = this.markImageDirtyPromises;
-		this.markImageDirtyPromises = [];
 		this.maskImageDirty = false;
-		if (this._hide) {
+		await this.measureLock(async () => {
+			await Promise.all(
+				this.splittedWords.map(async (word) => {
+					const el = word.mainElement;
+					if (el) {
+						await measure(() => {
+							word.padding = Number.parseFloat(
+								getComputedStyle(el).paddingLeft,
+							);
+							word.width = el.clientWidth - word.padding * 2;
+							word.height = el.clientHeight - word.padding * 2;
+						});
+					} else {
+						word.width = 0;
+						word.height = 0;
+						word.padding = 0;
+					}
+					if (word.width * word.height === 0) {
+						console.warn("Word size is zero");
+					}
+				}),
+			);
+
 			await mutate(() => {
-				if (this._prevParentEl) {
-					this._prevParentEl.appendChild(this.element);
+				if (this.lyricPlayer.supportMaskImage) {
+					this.generateWebAnimationBasedMaskImage();
+				} else {
+					this.generateCalcBasedMaskImage();
 				}
-				this.element.style.display = "";
-				this.element.style.visibility = "hidden";
 			});
-		}
-		for (const word of this.splittedWords) {
-			const el = word.mainElement;
-			if (el) {
-				await measure(() => {
-					word.padding = Number.parseFloat(getComputedStyle(el).paddingLeft);
-					word.width = el.clientWidth - word.padding * 2;
-					word.height = el.clientHeight - word.padding * 2;
-				});
-			} else {
-				word.width = 0;
-				word.height = 0;
-				word.padding = 0;
-			}
-		}
-		if (this.lyricPlayer.supportMaskImage) {
-			this.generateWebAnimationBasedMaskImage();
-		} else {
-			this.generateCalcBasedMaskImage();
-		}
-		if (this._hide) {
-			await mutate(() => {
-				if (this._prevParentEl) {
-					this.element.remove();
-				}
-				this.element.style.display = "none";
-				this.element.style.visibility = "";
-			});
-		}
-		for (const resolve of resolves) {
+		});
+
+		for (const resolve of this.markImageDirtyPromiseResolve) {
 			resolve();
+			this.markImageDirtyPromiseResolve.delete(resolve);
 		}
+		await mutate(() => {
+			this.element.classList.remove(styles.dirty);
+		});
 	}
 	private generateCalcBasedMaskImage() {
 		for (const word of this.splittedWords) {
@@ -860,7 +875,6 @@ export class LyricLineEl extends LyricLineBase {
 		return this.element;
 	}
 	override setTransform(
-		left: number = this.left,
 		top: number = this.top,
 		scale: number = this.scale,
 		opacity = 1,
@@ -868,10 +882,9 @@ export class LyricLineEl extends LyricLineBase {
 		force = false,
 		delay = 0,
 	) {
-		super.setTransform(left, top, scale, opacity, blur, force, delay);
+		super.setTransform(top, scale, opacity, blur, force, delay);
 		const beforeInSight = this.isInSight;
 		const enableSpring = this.lyricPlayer.getEnableSpring();
-		this.left = left;
 		this.top = top;
 		this.scale = scale;
 		this.delay = (delay * 1000) | 0;
@@ -888,7 +901,6 @@ export class LyricLineEl extends LyricLineBase {
 			// this.lineWebAnimationTransforms.posX.setTargetPosition(left);
 			// this.lineWebAnimationTransforms.posY.setTargetPosition(top);
 			// this.lineWebAnimationTransforms.scale.setTargetPosition(scale);
-			this.lineTransforms.posX.setPosition(left);
 			this.lineTransforms.posY.setPosition(top);
 			this.lineTransforms.scale.setPosition(scale);
 			if (!enableSpring) {
@@ -907,7 +919,6 @@ export class LyricLineEl extends LyricLineBase {
 			// this.lineWebAnimationTransforms.posX.stop();
 			// this.lineWebAnimationTransforms.posY.stop();
 			// this.lineWebAnimationTransforms.scale.stop();
-			this.lineTransforms.posX.setTargetPosition(left, delay);
 			this.lineTransforms.posY.setTargetPosition(top, delay);
 			this.lineTransforms.scale.setTargetPosition(scale);
 			if (this.blur !== Math.min(32, blur)) {
@@ -919,7 +930,6 @@ export class LyricLineEl extends LyricLineBase {
 	}
 	update(delta = 0) {
 		if (!this.lyricPlayer.getEnableSpring()) return;
-		this.lineTransforms.posX.update(delta);
 		this.lineTransforms.posY.update(delta);
 		this.lineTransforms.scale.update(delta);
 		if (this.isInSight) {
@@ -978,19 +988,15 @@ export class LyricLineEl extends LyricLineBase {
 	}
 
 	_getDebugTargetPos(): string {
-		return `[位移: ${this.left}, ${this.top}; 缩放: ${this.scale}; 延时: ${this.delay}]`;
+		return `[位移: ${this.top}; 缩放: ${this.scale}; 延时: ${this.delay}]`;
 	}
 
 	get isInSight() {
-		const l = this.lineTransforms.posX.getCurrentPosition();
 		const t = this.lineTransforms.posY.getCurrentPosition();
-		const w = this.lineSize[0];
 		const h = this.lineSize[1];
-		const r = l + w;
 		const b = t + h;
-		const pr = this.lyricPlayer.size[0];
 		const pb = this.lyricPlayer.size[1];
-		return !(l > pr + w || r < -w || t > pb + h || b < -h);
+		return !(t > pb + h || b < -h);
 	}
 	private disposeElements() {
 		for (const realWord of this.splittedWords) {
