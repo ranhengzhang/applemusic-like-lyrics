@@ -1,22 +1,17 @@
 import {
 	ArrowLeftIcon,
-	HamburgerMenuIcon,
 	Pencil1Icon,
 	PlayIcon,
 	PlusIcon,
 } from "@radix-ui/react-icons";
 import {
-	Avatar,
 	Box,
 	Button,
-	Card,
 	Container,
 	ContextMenu,
-	DropdownMenu,
 	Flex,
 	Heading,
 	IconButton,
-	Skeleton,
 	Text,
 	TextField,
 } from "@radix-ui/themes";
@@ -27,24 +22,15 @@ import { platform } from "@tauri-apps/plugin-os";
 import { useLiveQuery } from "dexie-react-hooks";
 import { motion, useMotionTemplate, useScroll } from "framer-motion";
 import md5 from "md5";
-import {
-	type CSSProperties,
-	type FC,
-	forwardRef,
-	useCallback,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { type FC, useCallback, useMemo, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { ViewportList } from "react-viewport-list";
 import { PlaylistCover } from "../../components/PlaylistCover/index.tsx";
+import { PlaylistSongCard } from "../../components/PlaylistSongCard/index.tsx";
 import { type Song, db } from "../../dexie.ts";
-import { router } from "../../router.tsx";
 import { emitAudioThread, readLocalMusicMetadata } from "../../utils/player.ts";
-import { useSongCover } from "../../utils/use-song-cover.ts";
 import styles from "./index.module.css";
 
 export type Loadable<Value> =
@@ -59,126 +45,6 @@ export type Loadable<Value> =
 			state: "hasData";
 			data: Awaited<Value>;
 	  };
-
-function toDuration(duration: number) {
-	const isRemainTime = duration < 0;
-
-	const d = Math.abs(duration | 0);
-	const sec = d % 60;
-	const min = Math.floor((d - sec) / 60);
-	const secText = "0".repeat(2 - sec.toString().length) + sec;
-
-	return `${isRemainTime ? "-" : ""}${min}:${secText}`;
-}
-
-export const SongCard = forwardRef<
-	HTMLDivElement,
-	{
-		songId: string;
-		songIndex: number;
-		onPlayList: (songIndex: number) => void;
-		onDeleteSong: (songId: string) => void;
-		style?: CSSProperties;
-	}
->(({ songId, songIndex, onPlayList, onDeleteSong, style }, ref) => {
-	const song: Loadable<Song> = useLiveQuery(
-		() =>
-			db.songs.get(songId).then((data) => {
-				if (!data) {
-					return {
-						state: "hasError",
-						error: new Error(`未找到歌曲 ID ${songId}`),
-					};
-				}
-				return {
-					state: "hasData",
-					data: data,
-				};
-			}),
-		[songId],
-		{
-			state: "loading",
-		},
-	);
-	const songImgUrl = useSongCover(
-		song.state === "hasData" ? song.data : undefined,
-	);
-	const { t } = useTranslation();
-	const navigate = useNavigate();
-
-	return (
-		<Skeleton
-			style={style}
-			key={`song-card-${songId}`}
-			loading={song.state === "loading"}
-			ref={ref}
-			onDoubleClick={() => onPlayList(songIndex)}
-		>
-			<Box py="1" pr="4" style={style}>
-				<Card>
-					<Flex p="1" align="center" gap="4">
-						<Avatar size="5" fallback={<div />} src={songImgUrl} />
-						<Flex direction="column" justify="center" flexGrow="1" minWidth="0">
-							<Text wrap="nowrap" truncate>
-								{song.state === "hasData" &&
-									(song.data.songName ||
-										song.data.filePath ||
-										t(
-											"page.playlist.music.unknownSongName",
-											"未知歌曲 ID {id}",
-											{
-												id: songId,
-											},
-										))}
-							</Text>
-							<Text wrap="nowrap" truncate color="gray">
-								{song.state === "hasData" && (song.data.songArtists || "")}
-							</Text>
-						</Flex>
-						<Text wrap="nowrap">
-							{song.state === "hasData" &&
-								(song.data.duration ? toDuration(song.data.duration) : "")}
-						</Text>
-						<IconButton variant="ghost" onClick={() => onPlayList(songIndex)}>
-							<PlayIcon />
-						</IconButton>
-						<DropdownMenu.Root>
-							<DropdownMenu.Trigger>
-								<IconButton
-									variant="ghost"
-									onClick={() => router.navigate(`/song/${songId}`)}
-								>
-									<HamburgerMenuIcon />
-								</IconButton>
-							</DropdownMenu.Trigger>
-							<DropdownMenu.Content>
-								<DropdownMenu.Item onClick={() => onPlayList(songIndex)}>
-									<Trans i18nKey="page.playlist.music.dropdown.playMusic">
-										播放音乐
-									</Trans>
-								</DropdownMenu.Item>
-								<DropdownMenu.Item onClick={() => navigate(`/song/${songId}`)}>
-									<Trans i18nKey="page.playlist.music.dropdown.editMusicOverrideData">
-										编辑歌曲覆盖信息
-									</Trans>
-								</DropdownMenu.Item>
-								<DropdownMenu.Separator />
-								<DropdownMenu.Item
-									color="red"
-									onClick={() => onDeleteSong(songId)}
-								>
-									<Trans i18nKey="page.playlist.music.dropdown.removeFromPlaylist">
-										从歌单中删除
-									</Trans>
-								</DropdownMenu.Item>
-							</DropdownMenu.Content>
-						</DropdownMenu.Root>
-					</Flex>
-				</Card>
-			</Box>
-		</Skeleton>
-	);
-});
 
 const EditablePlaylistName: FC<{
 	playlistName: string;
@@ -602,7 +468,7 @@ export const Component: FC = () => {
 							viewportRef={playlistViewRef}
 						>
 							{(songId, index) => (
-								<SongCard
+								<PlaylistSongCard
 									key={`playlist-song-card-${songId}`}
 									songId={songId}
 									songIndex={index}

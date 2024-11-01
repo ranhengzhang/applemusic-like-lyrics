@@ -342,6 +342,9 @@ importers:
       '@dnd-kit/core':
         specifier: ^6.1.0
         version: 6.1.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@iconify/icons-fluent':
+        specifier: ^1.2.38
+        version: 1.2.38
       '@iconify/icons-ic':
         specifier: ^1.2.13
         version: 1.2.13
@@ -1343,6 +1346,9 @@ packages:
   '@hutson/parse-repository-url@3.0.2':
     resolution: {integrity: sha512-H9XAx3hc0BQHY6l+IFSWHDySypcXsvsuLhgYLUGywmJ5pswRVQJUHpOsobnLYp2ZUaUlKiKDrgWWhosOwAEM8Q==}
     engines: {node: '>=6.9.0'}
+
+  '@iconify/icons-fluent@1.2.38':
+    resolution: {integrity: sha512-nwCCUD3GLl/0xUDFnNIFYDhOr00mUTBToDBZaspFeXAaCnfHklMRtf0uHevBjKgGVqwlaV5c8zer7aNjwyRBGQ==}
 
   '@iconify/icons-ic@1.2.13':
     resolution: {integrity: sha512-TphrhwOvgd7CTmUhz6jgXF+SPnMtvTm03bZsAYbny2kwq4zlkhr9e16YEyPGMvKhjtTqNooA3iZ9Wa+pZ8moXQ==}
@@ -7870,6 +7876,10 @@ snapshots:
       is-negated-glob: 1.0.0
 
   '@hutson/parse-repository-url@3.0.2': {}
+
+  '@iconify/icons-fluent@1.2.38':
+    dependencies:
+      '@iconify/types': 2.0.0
 
   '@iconify/icons-ic@1.2.13':
     dependencies:

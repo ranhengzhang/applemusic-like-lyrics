@@ -1,9 +1,7 @@
-import { HamburgerMenuIcon } from "@radix-ui/react-icons";
+import { HamburgerMenuIcon, MagnifyingGlassIcon } from "@radix-ui/react-icons";
 import {
 	Badge,
 	Box,
-	Card,
-	ContextMenu,
 	DropdownMenu,
 	Flex,
 	Heading,
@@ -20,7 +18,7 @@ import { ViewportList } from "react-viewport-list";
 import { ExtensionInjectPoint } from "../../components/ExtensionInjectPoint/index.tsx";
 import { NewPlaylistButton } from "../../components/NewPlaylistButton/index.tsx";
 import { PageContainer } from "../../components/PageContainer/index.tsx";
-import { PlaylistCover } from "../../components/PlaylistCover/index.tsx";
+import { PlaylistCard } from "../../components/PlaylistCard/index.tsx";
 import { db } from "../../dexie.ts";
 import { router } from "../../router.tsx";
 import { updateInfoAtom } from "../../states/updater.ts";
@@ -56,6 +54,11 @@ export const Component: FC = () => {
 					</Box>
 					<Flex gap="1" wrap="wrap">
 						<ExtensionInjectPoint injectPointName="page.main.sidebar.before" />
+						<IconButton variant="soft" asChild>
+							<Link to="/search">
+								<MagnifyingGlassIcon />
+							</Link>
+						</IconButton>
 						<NewPlaylistButton />
 						<DropdownMenu.Root>
 							<DropdownMenu.Trigger>
@@ -114,30 +117,7 @@ export const Component: FC = () => {
 							ref={viewportRef}
 						>
 							<ViewportList items={playlists} viewportRef={viewportRef}>
-								{(v) => (
-									<ContextMenu.Root key={v.id}>
-										<ContextMenu.Trigger>
-											<Card asChild size="2" mb="4" key={v.id}>
-												<Link to={`/playlist/${v.id}`}>
-													<Flex align="center" gap="2">
-														<PlaylistCover playlistId={v.id} />
-														{v.name}
-													</Flex>
-												</Link>
-											</Card>
-										</ContextMenu.Trigger>
-										<ContextMenu.Content>
-											<ContextMenu.Item
-												color="red"
-												onSelect={() => db.playlists.delete(v.id)}
-											>
-												<Trans i18nKey="page.main.playlistMenu.delete">
-													删除
-												</Trans>
-											</ContextMenu.Item>
-										</ContextMenu.Content>
-									</ContextMenu.Root>
-								)}
+								{(v) => <PlaylistCard playlist={v} />}
 							</ViewportList>
 						</div>
 					)

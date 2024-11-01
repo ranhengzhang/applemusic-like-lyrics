@@ -31,7 +31,7 @@ import {
 	hideNowPlayingBarAtom,
 	playlistCardOpenedAtom,
 } from "../../states/index.ts";
-import { PlaylistCard } from "../PlaylistCard/index.tsx";
+import { NowPlaylistCard } from "../NowPlaylistCard/index.tsx";
 import styles from "./index.module.css";
 
 export const NowPlayingBar: FC = () => {
@@ -88,7 +88,7 @@ export const NowPlayingBar: FC = () => {
 					right="0"
 					bottom="calc(var(--amll-player-playbar-bottom) + var(--space-3))"
 				>
-					<PlaylistCard className={classNames(styles.playlistCard)} />
+					<NowPlaylistCard className={classNames(styles.playlistCard)} />
 				</Flex>
 			)}
 			<Flex

@@ -1,5 +1,7 @@
 import react from "@vitejs/plugin-react";
 import { execSync } from "child_process";
+import jotaiDebugLabel from "jotai/babel/plugin-debug-label";
+import jotaiReactRefresh from "jotai/babel/plugin-react-refresh";
 import { resolve } from "path";
 import { type Plugin, defineConfig } from "vite";
 import i18nextLoader from "vite-plugin-i18next-loader";
@@ -84,9 +86,14 @@ export default defineConfig(async () => ({
 		rollupOptions: {
 			shimMissingExports: true,
 		},
+		sourcemap: "inline",
 	},
 	plugins: [
-		react(),
+		react({
+			babel: {
+				plugins: [jotaiDebugLabel, jotaiReactRefresh],
+			},
+		}),
 		wasm(),
 		topLevelAwait(),
 		svgr({
