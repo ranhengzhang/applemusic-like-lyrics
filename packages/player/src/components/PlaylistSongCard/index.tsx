@@ -62,7 +62,7 @@ export const PlaylistSongCard = forwardRef<
 			ref={ref}
 			onDoubleClick={() => onPlayList(songIndex)}
 		>
-			<Box py="1" pr="4" style={style}>
+			<Box py="1" style={style}>
 				<Card>
 					<Flex p="1" align="center" gap="4">
 						<Avatar size="5" fallback={<div />} src={songImgUrl} />

@@ -7,7 +7,6 @@ import {
 import {
 	Box,
 	Button,
-	Container,
 	ContextMenu,
 	Flex,
 	Heading,
@@ -27,6 +26,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { ViewportList } from "react-viewport-list";
+import { PageContainer } from "../../components/PageContainer/index.tsx";
 import { PlaylistCover } from "../../components/PlaylistCover/index.tsx";
 import { PlaylistSongCard } from "../../components/PlaylistSongCard/index.tsx";
 import { type Song, db } from "../../dexie.ts";
@@ -292,13 +292,8 @@ export const Component: FC = () => {
 	);
 
 	return (
-		<Container
-			mx={{
-				initial: "4",
-				sm: "9",
-			}}
-		>
-			<Flex direction="column" maxHeight="100vh" height="100vh">
+		<PageContainer>
+			<Flex direction="column" height="100%">
 				<Flex gap="4" direction="column" flexGrow="0" pb="4" mt="5">
 					<Flex align="end" pt="4">
 						<Button variant="soft" onClick={() => history.back()}>
@@ -457,10 +452,8 @@ export const Component: FC = () => {
 					flexGrow="1"
 					overflowY="auto"
 					minHeight="0"
+					pb="4"
 					ref={playlistViewRef}
-					style={{
-						paddingBottom: "var(--amll-player-playbar-bottom)",
-					}}
 				>
 					{playlist?.songIds && (
 						<ViewportList
@@ -480,7 +473,7 @@ export const Component: FC = () => {
 					)}
 				</Box>
 			</Flex>
-		</Container>
+		</PageContainer>
 	);
 };
 

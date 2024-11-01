@@ -77,6 +77,10 @@ const GitMetadataPlugin = (): Plugin => {
 	};
 };
 
+const ReactCompilerConfig = {
+	target: "18",
+};
+
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
 	build: {
@@ -91,7 +95,11 @@ export default defineConfig(async () => ({
 	plugins: [
 		react({
 			babel: {
-				plugins: [jotaiDebugLabel, jotaiReactRefresh],
+				plugins: [
+					["babel-plugin-react-compiler", ReactCompilerConfig],
+					jotaiDebugLabel,
+					jotaiReactRefresh,
+				],
 			},
 		}),
 		wasm(),

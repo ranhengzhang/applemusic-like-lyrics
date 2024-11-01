@@ -18,6 +18,7 @@
 	grid-row: thumb;
 	justify-self: center;
 	z-index: 1;
+	mix-blend-mode: plus-lighter;
 
 	/* border: 1px solid aqua; */
 
