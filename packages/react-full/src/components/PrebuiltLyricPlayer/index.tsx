@@ -383,8 +383,9 @@ export const PrebuiltLyricPlayer: FC<HTMLProps<HTMLDivElement>> = ({
 		}
 	}, [isVertical]);
 
-	const verticalImmerseCover =  hideLyricView && (
-		verticalCoverLayout === VerticalCoverLayout.Auto
+	const verticalImmerseCover =
+		hideLyricView &&
+		(verticalCoverLayout === VerticalCoverLayout.Auto
 			? musicCoverIsVideo && isVertical
 			: verticalCoverLayout === VerticalCoverLayout.ForceImmersive);
 

@@ -120,7 +120,7 @@ export default defineConfig(async () => ({
 		}),
 	],
 	resolve: {
-		dedupe: ["react", "react-dom", "jotai"],
+		dedupe: ["react", "react-dom", "react-compiler-runtime", "jotai"],
 		alias: {
 			"@applemusic-like-lyrics/core": resolve(__dirname, "../core/src"),
 			"@applemusic-like-lyrics/react": resolve(__dirname, "../react/src"),
