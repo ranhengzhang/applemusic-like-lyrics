@@ -11,7 +11,7 @@ import {
 } from "@radix-ui/themes";
 import { open } from "@tauri-apps/plugin-shell";
 import { useLiveQuery } from "dexie-react-hooks";
-import { type FC, useState } from "react";
+import { type FC, useLayoutEffect, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { type TTMLDBLyricEntry, db } from "../../dexie.ts";
 import styles from "./index.module.css";
@@ -26,7 +26,10 @@ function getMetadataValue(ttml: TTMLLyric, key: string) {
 	return result;
 }
 
-function isTTMLEntryMatch(entry: TTMLDBLyricEntry, pattern: string | RegExp) {
+function isTTMLEntryMatch(
+	entry: TTMLDBLyricEntry,
+	patterns: (string | RegExp)[],
+) {
 	const result = {
 		name: entry.name,
 		raw: entry.raw,
@@ -35,58 +38,68 @@ function isTTMLEntryMatch(entry: TTMLDBLyricEntry, pattern: string | RegExp) {
 		matchedLinePreview: [] as string[],
 	};
 
-	for (let i = 0; i < entry.content.lines.length; i++) {
-		const text = entry.content.lines[i].words.map((w) => w.word).join("");
-		const matched = text.toLowerCase().match(pattern);
-		if (matched) {
-			result.matchedLinePreview = entry.content.lines
-				.slice(i, i + 3)
-				.map((l) => l.words.map((w) => w.word).join(""));
-			break;
+	for (const pattern of patterns) {
+		for (let i = 0; i < entry.content.lines.length; i++) {
+			const text = entry.content.lines[i].words.map((w) => w.word).join("");
+			const matched = text.toLowerCase().match(pattern);
+			if (matched) {
+				result.matchedLinePreview = entry.content.lines
+					.slice(i, i + 3)
+					.map((l) => l.words.map((w) => w.word).join(""));
+				break;
+			}
 		}
-	}
-	if (result.matchedLinePreview.length) {
-		return result;
-	}
-	if (result.name.match(pattern)) {
-		return result;
-	}
-	if (result.songName.match(pattern)) {
-		return result;
-	}
-	if (result.songArtists.match(pattern)) {
-		return result;
+		if (result.matchedLinePreview.length > 0) {
+			return result;
+		}
+		if (result.songName.match(pattern)) {
+			return result;
+		}
+		if (`${result.songName} - ${result.songArtists}`.match(pattern)) {
+			return result;
+		}
+		if (`${result.songArtists} - ${result.songName}`.match(pattern)) {
+			return result;
+		}
+		if (result.songArtists.match(pattern)) {
+			return result;
+		}
 	}
 	return undefined;
 }
 
 export const TTMLImportDialog: FC<{
+	defaultValue?: string;
 	onSelectedLyric?: (ttmlContent: string) => void;
-}> = ({ onSelectedLyric }) => {
+}> = ({ onSelectedLyric, defaultValue }) => {
 	const { t } = useTranslation();
 
 	const [searchWord, setSearchWord] = useState("");
 	const [opened, setOpened] = useState(false);
 
 	const result = useLiveQuery(() => {
-		const word = searchWord.trim();
-		if (word.length > 0) {
-			let pattern: string | RegExp = word.toLowerCase();
+		const words = searchWord.trim();
+		if (words.length > 0) {
+			let pattern: string | RegExp = words;
 			try {
-				pattern = new RegExp(word, "i");
+				pattern = new RegExp(words, "i");
 			} catch {}
 			return db.ttmlDB
 				.toCollection()
 				.reverse()
-				.filter((x) => !!isTTMLEntryMatch(x, pattern))
+				.filter((x) => !!isTTMLEntryMatch(x, [pattern]))
 				.limit(10)
 				.sortBy("name")
 				.then((x) =>
-					x.map((x) => isTTMLEntryMatch(x, pattern)).filter((v) => !!v),
+					x.map((x) => isTTMLEntryMatch(x, [pattern])).filter((v) => !!v),
 				);
 		}
 		return [];
 	}, [searchWord]);
+
+	useLayoutEffect(() => {
+		setSearchWord(defaultValue ?? "");
+	}, [defaultValue]);
 
 	return (
 		<Dialog.Root open={opened} onOpenChange={setOpened}>

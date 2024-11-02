@@ -68,9 +68,9 @@ export const LyricTabContent: FC = () => {
 				song.translatedLrc = saveTranslatedLyricContent;
 				song.romanLrc = saveRomanLyricContent;
 				setLyricFormat(saveLyricFormat);
-				setLyricContent(saveLyricFormat);
-				setTranslatedLyricContent(saveLyricFormat);
-				setRomanLyricContent(saveLyricFormat);
+				setLyricContent(saveLyricContent);
+				setTranslatedLyricContent(saveTranslatedLyricContent);
+				setRomanLyricContent(saveRomanLyricContent);
 			});
 		},
 		[song],
@@ -195,6 +195,7 @@ export const LyricTabContent: FC = () => {
 					</>
 				)}
 				<TTMLImportDialog
+					defaultValue={song ? `${song.songArtists} - ${song.songName}` : ""}
 					onSelectedLyric={(ttmlContent) => {
 						saveData("ttml", ttmlContent, "", "");
 					}}

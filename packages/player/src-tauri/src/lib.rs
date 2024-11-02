@@ -173,7 +173,6 @@ fn recreate_window(app: &AppHandle) {
                 false
             }
         })
-        .theme(Some(Theme::Dark))
         .decorations({
             #[cfg(target_os = "macos")]
             {

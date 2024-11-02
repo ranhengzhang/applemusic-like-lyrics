@@ -55,6 +55,7 @@ export class CanvasLyricLine extends LyricLineBase {
 	private layoutWords: TextLayoutResult[][] = [];
 	private translatedLayoutWords: TextLayoutResult[] = [];
 	private romanLayoutWords: TextLayoutResult[] = [];
+	private lineCanvas: HTMLCanvasElement = document.createElement("canvas");
 	/** @internal */
 	relayout(): void {
 		const config: TextLayoutConfig = {
@@ -79,6 +80,60 @@ export class CanvasLyricLine extends LyricLineBase {
 			...layoutLine(ctx, this.line.translatedLyric, config),
 		];
 		this.romanLayoutWords = [...layoutLine(ctx, this.line.romanLyric, config)];
+
+		// 在自己的 Canvas 上绘制
+		this.measureSize();
+
+		this.lineCanvas.width = this.player.ctx.canvas.width;
+		this.lineCanvas.height = this.lineSize[1] * devicePixelRatio;
+
+		const lctx = this.lineCanvas.getContext("2d")!;
+		lctx.globalAlpha = 1;
+		this.player.setFontSize(1);
+		lctx.font = ctx.font;
+		lctx.scale(devicePixelRatio, devicePixelRatio);
+		lctx.fillStyle = "white";
+		lctx.textBaseline = "top";
+		lctx.textAlign = "left";
+		lctx.font = `${this.player.baseFontSize}px ${this.player.baseFontFamily}`;
+		let lineIndex = 0;
+		for (const word of this.layoutWords) {
+			for (const layout of word) {
+				lctx.fillText(
+					layout.text,
+					layout.x,
+					layout.lineIndex *
+						this.player.baseFontSize *
+						this.player.baseLineHeight,
+				);
+				lineIndex = layout.lineIndex;
+			}
+		}
+		lctx.translate(0, (lineIndex + 1) * this.player.baseFontSize);
+		this.player.setFontSize(0.5);
+		lctx.font = ctx.font;
+		lctx.globalAlpha = 0.5;
+		lineIndex = 0;
+		for (const layout of this.translatedLayoutWords) {
+			lctx.fillText(
+				layout.text,
+				layout.x,
+				layout.lineIndex *
+					this.player.baseFontSize *
+					this.player.baseLineHeight,
+			);
+			lineIndex = layout.lineIndex;
+		}
+		lctx.translate(0, (lineIndex + 1) * this.player.baseFontSize);
+		for (const layout of this.romanLayoutWords) {
+			lctx.fillText(
+				layout.text,
+				layout.x,
+				layout.lineIndex *
+					this.player.baseFontSize *
+					this.player.baseLineHeight,
+			);
+		}
 	}
 	private enabled = false;
 	override enable(): void {
@@ -125,48 +180,11 @@ export class CanvasLyricLine extends LyricLineBase {
 		ctx.fillStyle = "white";
 		ctx.filter = `blur(${this.blur}px)`;
 		ctx.textRendering = "geometricPrecision";
-		this.player.setFontSize(1);
+		ctx.globalAlpha = this.opacity;
 		ctx.translate(0, this.lineTransforms.posY.getCurrentPosition());
-		const scale = this.lineTransforms.scale.getCurrentPosition() / 100;
-		ctx.scale(scale, scale);
-		ctx.globalAlpha = this.opacity * (this.enabled ? 1 : 0.5);
-		let lineIndex = 0;
-		for (const word of this.layoutWords) {
-			for (const layout of word) {
-				ctx.fillText(
-					layout.text,
-					layout.x,
-					layout.lineIndex *
-						this.player.baseFontSize *
-						this.player.baseLineHeight,
-				);
-				lineIndex = layout.lineIndex;
-			}
-		}
-		ctx.translate(0, (lineIndex + 1) * this.player.baseFontSize);
-		this.player.setFontSize(0.5);
-		ctx.globalAlpha = this.opacity * 0.5 * (this.enabled ? 1 : 0.5);
-		lineIndex = 0;
-		for (const layout of this.translatedLayoutWords) {
-			ctx.fillText(
-				layout.text,
-				layout.x,
-				layout.lineIndex *
-					this.player.baseFontSize *
-					this.player.baseLineHeight,
-			);
-			lineIndex = layout.lineIndex;
-		}
-		ctx.translate(0, (lineIndex + 1) * this.player.baseFontSize);
-		for (const layout of this.romanLayoutWords) {
-			ctx.fillText(
-				layout.text,
-				layout.x,
-				layout.lineIndex *
-					this.player.baseFontSize *
-					this.player.baseLineHeight,
-			);
-		}
+		ctx.scale(1 / devicePixelRatio, 1 / devicePixelRatio);
+		if (this.lineCanvas.width * this.lineCanvas.height > 0)
+			ctx.drawImage(this.lineCanvas, 0, 0);
 		ctx.restore();
 	}
 }

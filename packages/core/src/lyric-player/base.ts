@@ -50,6 +50,8 @@ export abstract class LyricPlayerBase
 	protected allowScroll = true;
 	protected isPageVisible = true;
 
+	protected initialLayoutFinished = false;
+
 	protected posXSpringParams: Partial<SpringParams> = {
 		mass: 1,
 		damping: 10,
@@ -384,6 +386,7 @@ export abstract class LyricPlayerBase
 	 * @param initialTime 初始时间，默认为 0
 	 */
 	setLyricLines(lines: LyricLine[], initialTime = 0) {
+		this.initialLayoutFinished = false;
 		for (const line of lines) {
 			for (const word of line.words) {
 				word.word = word.word.replace(/\s+/g, " ");
@@ -462,6 +465,8 @@ export abstract class LyricPlayerBase
 		// if (!this._getIsNonDynamic() && !this.supportMaskImage)
 		// 	this.element.style.setProperty("--amll-player-time", `${time}`);
 		// if (this.isScrolled) return;
+
+		if (!this.initialLayoutFinished) return;
 
 		const removedHotIds = new Set<number>();
 		const removedIds = new Set<number>();
@@ -589,9 +594,6 @@ export abstract class LyricPlayerBase
 	 */
 	async calcLayout(force?: boolean, reflow?: boolean) {
 		if (reflow) {
-			if (import.meta.env.DEV) {
-				console.log("calcLayout with reflow");
-			}
 			// this.emUnit = Number.parseFloat(getComputedStyle(this.element).fontSize);
 			await Promise.all(
 				this.currentLyricLineObjects.map(async (lineObj) => {

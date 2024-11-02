@@ -5,15 +5,25 @@ import {
 import { Box, Theme } from "@radix-ui/themes";
 import "@radix-ui/themes/styles.css";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { platform, version } from "@tauri-apps/plugin-os";
 import classNames from "classnames";
 import { useAtomValue, useStore } from "jotai";
-import { StrictMode, Suspense, lazy, useEffect, useLayoutEffect } from "react";
+import {
+	StrictMode,
+	Suspense,
+	lazy,
+	useEffect,
+	useLayoutEffect,
+	useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { RouterProvider } from "react-router-dom";
 import { ToastContainer } from "react-toastify";
+import semverGt from "semver/functions/gt";
 import Stats from "stats.js";
 import styles from "./App.module.css";
 import { AppContainer } from "./components/AppContainer/index.tsx";
+import DarkThemeDetector from "./components/DarkThemeDetector/index.tsx";
 import { ExtensionInjectPoint } from "./components/ExtensionInjectPoint/index.tsx";
 import { LocalMusicContext } from "./components/LocalMusicContext/index.tsx";
 import { NowPlayingBar } from "./components/NowPlayingBar/index.tsx";
@@ -26,6 +36,7 @@ import {
 	MusicContextMode,
 	audioQualityDialogOpenedAtom,
 	displayLanguageAtom,
+	isDarkThemeAtom,
 	musicContextModeAtom,
 	showStatJSFrameAtom,
 } from "./states/index.ts";
@@ -38,6 +49,8 @@ function App() {
 	const showStatJSFrame = useAtomValue(showStatJSFrameAtom);
 	const musicContextMode = useAtomValue(musicContextModeAtom);
 	const displayLanguage = useAtomValue(displayLanguageAtom);
+	const isDarkTheme = useAtomValue(isDarkThemeAtom);
+	const [hasBackground, setHasBackground] = useState(false);
 	const store = useStore();
 	const { i18n } = useTranslation();
 
@@ -51,8 +64,15 @@ function App() {
 
 	useEffect(() => {
 		(async () => {
-			await new Promise((r) => requestAnimationFrame(r));
 			const win = getCurrentWindow();
+			if (platform() === "windows") {
+				if (semverGt("10.0.22000", version())) {
+					setHasBackground(true);
+					await win.clearEffects();
+				}
+			}
+			await new Promise((r) => requestAnimationFrame(r));
+
 			await win.show();
 		})();
 	}, []);
@@ -93,15 +113,16 @@ function App() {
 			)}
 			<UpdateContext />
 			<ShotcutContext />
+			<DarkThemeDetector />
 			<Suspense>
 				<ExtensionContext />
 			</Suspense>
 			<ExtensionInjectPoint injectPointName="context" hideErrorCallout />
 			<StrictMode>
 				<Theme
-					appearance="dark"
+					appearance={isDarkTheme ? "dark" : "light"}
 					panelBackground="solid"
-					hasBackground={false}
+					hasBackground={hasBackground}
 					className={styles.radixTheme}
 				>
 					<Box

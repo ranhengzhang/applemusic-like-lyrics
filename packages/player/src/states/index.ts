@@ -3,6 +3,18 @@ import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 import type { SongData } from "../utils/player.ts";
 
+export enum DarkMode {
+	Auto = "auto",
+	Light = "light",
+	Dark = "dark",
+}
+export const autoDarkModeAtom = atom(true);
+export const darkModeAtom = atom(DarkMode.Auto);
+export const isDarkThemeAtom = atom((get) => {
+	if (get(darkModeAtom) === DarkMode.Auto) return get(autoDarkModeAtom);
+	return get(darkModeAtom) === DarkMode.Dark;
+});
+
 export const musicIdAtom = atom("");
 export const playlistCardOpenedAtom = atom(false);
 export const currentPlaylistAtom = atom<SongData[]>([]);

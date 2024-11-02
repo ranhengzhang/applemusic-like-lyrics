@@ -7,6 +7,7 @@
 import type { LyricLine } from "../../interfaces";
 import "../../styles/index.css";
 import styles from "../../styles/lyric-player.module.css";
+import { debounce } from "../../utils/debounce.js";
 import { LyricPlayerBase } from "../base";
 import { LyricLineEl, type RawLyricLineMouseEvent } from "./lyric-line";
 
@@ -39,6 +40,21 @@ export type LyricLineMouseEventListener = (evt: LyricLineMouseEvent) => void;
 export class DomLyricPlayer extends LyricPlayerBase {
 	override currentLyricLineObjects: LyricLineEl[] = [];
 
+	private debounceCalcLayout = debounce(
+		() =>
+			this.calcLayout(true, true).then(() =>
+				this.currentLyricLineObjects.map(async (el, i) => {
+					el.markMaskImageDirty("DomLyricPlayer onResize");
+					await el.waitMaskImageUpdated();
+					if (this.hotLines.has(i)) {
+						el.enable(this.currentTime);
+						el.resume();
+					}
+				}),
+			),
+		100,
+	);
+
 	override onResize(): void {
 		const computedStyles = getComputedStyle(this.element);
 		this._baseFontSize = Number.parseFloat(computedStyles.fontSize);
@@ -53,16 +69,11 @@ export class DomLyricPlayer extends LyricPlayerBase {
 		this.innerSize[0] = innerWidth;
 		this.innerSize[1] = innerHeight;
 		this.rebuildStyle();
-		this.calcLayout(true, true).then(() =>
-			this.currentLyricLineObjects.map(async (el, i) => {
-				el.markMaskImageDirty("DomLyricPlayer onResize");
-				await el.waitMaskImageUpdated();
-				if (this.hotLines.has(i)) {
-					el.enable(this.currentTime);
-					el.resume();
-				}
-			}),
-		);
+		for (const obj of this.currentLyricLineObjects) {
+			if (!obj.getElement().classList.contains(styles.dirty))
+				obj.getElement().classList.add(styles.dirty);
+		}
+		this.debounceCalcLayout();
 	}
 
 	readonly supportPlusLighter = CSS.supports("mix-blend-mode", "plus-lighter");
@@ -150,7 +161,9 @@ export class DomLyricPlayer extends LyricPlayerBase {
 		this.setLinePosXSpringParams({});
 		this.setLinePosYSpringParams({});
 		this.setLineScaleSpringParams({});
-		this.calcLayout(true, true);
+		this.calcLayout(true, true).then(() => {
+			this.initialLayoutFinished = true;
+		});
 	}
 
 	override pause() {
@@ -170,6 +183,7 @@ export class DomLyricPlayer extends LyricPlayerBase {
 	}
 
 	override update(delta = 0) {
+		if (!this.initialLayoutFinished) return;
 		super.update(delta);
 		if (!this.isPageVisible) return;
 		const deltaS = delta / 1000;

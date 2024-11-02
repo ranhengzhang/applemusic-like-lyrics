@@ -1,6 +1,6 @@
 import classNames from "classnames";
 import { type Variants, motion } from "framer-motion";
-import { type FC, type HTMLProps, memo } from "react";
+import { type FC, type HTMLProps, forwardRef, memo } from "react";
 import IconDolbyAtmos from "./icon_dolby_atmos.svg?react";
 import LoselessIcon from "./icon_loseless.svg?react";
 import styles from "./index.module.css";
@@ -61,47 +61,54 @@ export const AudioQualityTag: FC<
 		tagText?: string;
 		tagIcon?: boolean;
 	} & HTMLProps<HTMLDivElement>
-> = memo(({ tagText, tagIcon, isDolbyAtmos, className, onClick, ...rest }) => {
-	return (
-		<div
-			className={classNames(
-				className,
-				styles.audioQualityTag,
-				onClick && styles.clickable,
-			)}
-			onClick={onClick}
-			{...rest}
-		>
-			{isDolbyAtmos ? (
-				<motion.div
-					key="dolby-atmos"
-					initial="hide"
-					animate="show"
-					whileHover={onClick ? "hover" : undefined}
-					whileTap={onClick ? "active" : undefined}
-					exit="hide"
-					className={styles.dolbyLogo}
-					variants={DOLBY_VARIENTS}
+> = memo(
+	forwardRef(
+		({ tagText, tagIcon, isDolbyAtmos, className, onClick, ...rest }, ref) => {
+			return (
+				<div
+					className={classNames(
+						className,
+						styles.audioQualityTag,
+						onClick && styles.clickable,
+					)}
+					onClick={onClick}
+					ref={ref}
+					{...rest}
 				>
-					<IconDolbyAtmos className={styles.dolbyLogoGlow} />
-					<IconDolbyAtmos />
-				</motion.div>
-			) : (
-				<motion.div
-					key={`common-tag-${tagIcon}-${tagText}`}
-					initial="hide"
-					animate="show"
-					whileHover={onClick ? "hover" : undefined}
-					whileTap={onClick ? "active" : undefined}
-					exit="hide"
-					variants={COMMON_VARIENTS}
-				>
-					<div className={styles.commonTag}>
-						{tagIcon && <LoselessIcon height="11px" />}
-						{tagText && <div className={styles.commonTagText}>{tagText}</div>}
-					</div>
-				</motion.div>
-			)}
-		</div>
-	);
-});
+					{isDolbyAtmos ? (
+						<motion.div
+							key="dolby-atmos"
+							initial="hide"
+							animate="show"
+							whileHover={onClick ? "hover" : undefined}
+							whileTap={onClick ? "active" : undefined}
+							exit="hide"
+							className={styles.dolbyLogo}
+							variants={DOLBY_VARIENTS}
+						>
+							<IconDolbyAtmos className={styles.dolbyLogoGlow} />
+							<IconDolbyAtmos />
+						</motion.div>
+					) : (
+						<motion.div
+							key={`common-tag-${tagIcon}-${tagText}`}
+							initial="hide"
+							animate="show"
+							whileHover={onClick ? "hover" : undefined}
+							whileTap={onClick ? "active" : undefined}
+							exit="hide"
+							variants={COMMON_VARIENTS}
+						>
+							<div className={styles.commonTag}>
+								{tagIcon && <LoselessIcon height="11px" />}
+								{tagText && (
+									<div className={styles.commonTagText}>{tagText}</div>
+								)}
+							</div>
+						</motion.div>
+					)}
+				</div>
+			);
+		},
+	),
+);

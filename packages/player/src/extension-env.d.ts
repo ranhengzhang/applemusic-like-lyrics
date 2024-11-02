@@ -64,7 +64,7 @@ declare interface ExtensionContext extends EventTarget {
 	/**
 	 * 扩展程序接口的版本号，会随着扩展接口更新而递增数字
 	 */
-	extensionApiNumber: readonly number;
+	extensionApiNumber: number;
 	jotaiStore: ReturnType<typeof createStore>;
 	/**
 	 * 将扩展程序的本地化字段数据注册到 AMLL Player 的国际化上下文中
