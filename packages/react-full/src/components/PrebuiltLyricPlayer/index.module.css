@@ -71,11 +71,11 @@
 		transition: scale 0.3s;
 
 		@media screen and (max-height: 1080px) {
-			scale: 1.2;
+			scale: 1.1;
 		}
 
 		@media screen and (max-height: 768px) {
-			scale: 1;
+			scale: 0.8;
 		}
 
 		@media screen and (max-height: 512px) {

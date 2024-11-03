@@ -27,14 +27,14 @@
 	padding: 0;
 	border: none;
 
-	transition: background-color 0.5s;
+	transition: background-color 0.3s;
 
 	&:hover {
 		background-color: #fff2;
 	}
 
 	&:active {
-		background-color: #fff4;
+		background-color: #fff2;
 
 		* {
 			animation-name: none !important;
