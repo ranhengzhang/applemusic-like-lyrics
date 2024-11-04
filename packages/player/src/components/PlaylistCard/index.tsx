@@ -1,6 +1,6 @@
 import { Card, ContextMenu, Flex, Text } from "@radix-ui/themes";
 import { type PropsWithChildren, forwardRef, useMemo } from "react";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { type Playlist, db } from "../../dexie.ts";
 import { PlaylistCover } from "../PlaylistCover/index.tsx";
@@ -11,6 +11,7 @@ export const PlaylistCard = forwardRef<
 		playlist: Playlist;
 	}>
 >(({ playlist, children }, ref) => {
+	const { t } = useTranslation();
 	const songAmount = playlist.songIds.length;
 	const createTime = useMemo(() => {
 		const today = new Date();
@@ -31,21 +32,21 @@ export const PlaylistCard = forwardRef<
 								<Text>{playlist.name}</Text>
 								<Text color="gray" size="2">
 									<Flex gap="2">
-										<Trans
-											i18nKey="page.main.playlistCard.songCount"
-											value={{ songAmount }}
-											as="div"
-										>
-											{{ songAmount }} 首歌曲
-										</Trans>
+										{t(
+											"page.main.playlistCard.songCount",
+											"{songAmount} 首歌曲",
+											{
+												songAmount,
+											},
+										)}
 										<div>-</div>
-										<Trans
-											i18nKey="page.main.playlistCard.createTime"
-											value={{ createTime }}
-											as="div"
-										>
-											创建于 {{ createTime }}
-										</Trans>
+										{t(
+											"page.main.playlistCard.createTime",
+											"创建于 {createTime}",
+											{
+												createTime,
+											},
+										)}
 									</Flex>
 								</Text>
 							</Flex>

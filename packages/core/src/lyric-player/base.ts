@@ -22,7 +22,7 @@ export abstract class LyricPlayerBase
 	protected element: HTMLElement = document.createElement("div");
 
 	protected currentTime = 0;
-	private lyricLinesSize: WeakMap<LyricLineBase, [number, number]> =
+	protected lyricLinesSize: WeakMap<LyricLineBase, [number, number]> =
 		new WeakMap();
 	protected currentLyricLines: LyricLine[] = [];
 	// protected currentLyricLineObjects: LyricLineBase[] = [];
@@ -31,6 +31,7 @@ export abstract class LyricPlayerBase
 	protected hotLines: Set<number> = new Set();
 	protected bufferedLines: Set<number> = new Set();
 	protected isNonDynamic = false;
+	protected hasDuetLine = false;
 	protected scrollToIndex = 0;
 	protected disableSpring = false;
 	protected interludeDotsSize: [number, number] = [0, 0];
@@ -89,6 +90,7 @@ export abstract class LyricPlayerBase
 		this.onResize();
 	}) as ResizeObserverCallback);
 	protected wordFadeWidth = 0.5;
+	protected targetAlignIndex = 0;
 
 	constructor() {
 		super();
@@ -405,6 +407,8 @@ export abstract class LyricPlayerBase
 			}
 		}
 
+		this.hasDuetLine = this.processedLines.some((line) => line.isDuet);
+
 		// 将行间有较短空隙的两个歌词行的结束时间拉长，与下一行歌词行的开始时间一致，以便于更好的显示
 		this.processedLines.forEach((line, i, lines) => {
 			const nextLine = lines[i + 1];
@@ -466,7 +470,7 @@ export abstract class LyricPlayerBase
 		// 	this.element.style.setProperty("--amll-player-time", `${time}`);
 		// if (this.isScrolled) return;
 
-		if (!this.initialLayoutFinished) return;
+		if (!this.initialLayoutFinished && !isSeek) return;
 
 		const removedHotIds = new Set<number>();
 		const removedIds = new Set<number>();
@@ -633,6 +637,7 @@ export abstract class LyricPlayerBase
 		curPos -= scrollOffset;
 		curPos += this.size[1] * this.alignPosition;
 		const curLine = this.currentLyricLineObjects[targetAlignIndex];
+		this.targetAlignIndex = targetAlignIndex;
 		if (curLine) {
 			const lineHeight = this.lyricLinesSize.get(curLine)?.[1] ?? 0;
 			switch (this.alignAnchor) {

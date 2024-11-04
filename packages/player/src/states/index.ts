@@ -70,6 +70,7 @@ export const wsProtocolConnectedAddrsAtom = atom(new Set<string>());
 
 export enum LyricPlayerImplementation {
 	Dom = "dom",
+	DomSlim = "dom-slim",
 	Canvas = "canvas",
 }
 

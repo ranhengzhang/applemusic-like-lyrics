@@ -1,43 +1,23 @@
 /**
  * @fileoverview
- * 一个播放歌词的组件
+ * 一个播放歌词的组件，但是进行了部分效果的阉割精简，以尝试改善在低性能设备上的性能问题
  * @author SteveXMH
  */
 
-import type { LyricLine } from "../../interfaces";
+import type { LyricLine } from "../../interfaces.ts";
 import "../../styles/index.css";
-import styles from "../../styles/lyric-player.module.css";
-import { debounce } from "../../utils/debounce.js";
-import { LyricPlayerBase } from "../base";
-import { LyricLineEl, type RawLyricLineMouseEvent } from "./lyric-line";
-
-/**
- * 歌词行鼠标相关事件，可以获取到歌词行的索引和歌词行元素
- */
-export class LyricLineMouseEvent extends MouseEvent {
-	constructor(
-		/**
-		 * 歌词行索引
-		 */
-		public readonly lineIndex: number,
-		/**
-		 * 歌词行元素
-		 */
-		public readonly line: LyricLineEl,
-		event: MouseEvent,
-	) {
-		super(`line-${event.type}`, event);
-	}
-}
-
-export type LyricLineMouseEventListener = (evt: LyricLineMouseEvent) => void;
+import { debounce } from "../../utils/debounce.ts";
+import { LyricPlayerBase } from "../base.ts";
+import { LyricLineMouseEvent } from "../dom/index.ts";
+import styles from "./index.module.css";
+import { LyricLineEl, type RawLyricLineMouseEvent } from "./lyric-line.ts";
 
 /**
  * 歌词播放组件，本框架的核心组件
  *
  * 尽可能贴切 Apple Music for iPad 的歌词效果设计，且做了力所能及的优化措施
  */
-export class DomLyricPlayer extends LyricPlayerBase {
+export class DomSlimLyricPlayer extends LyricPlayerBase {
 	override currentLyricLineObjects: LyricLineEl[] = [];
 
 	private debounceCalcLayout = debounce(
@@ -69,10 +49,10 @@ export class DomLyricPlayer extends LyricPlayerBase {
 		this.innerSize[0] = innerWidth;
 		this.innerSize[1] = innerHeight;
 		this.rebuildStyle();
-		for (const obj of this.currentLyricLineObjects) {
-			if (!obj.getElement().classList.contains(styles.dirty))
-				obj.getElement().classList.add(styles.dirty);
-		}
+		// for (const obj of this.currentLyricLineObjects) {
+		// 	if (!obj.getElement().classList.contains(styles.dirty))
+		// 		obj.getElement().classList.add(styles.dirty);
+		// }
 		this.debounceCalcLayout();
 	}
 
@@ -107,7 +87,7 @@ export class DomLyricPlayer extends LyricPlayerBase {
 	constructor() {
 		super();
 		this.onResize();
-		this.element.classList.add("amll-lyric-player", "dom");
+		this.element.classList.add("amll-lyric-player", "dom-slim");
 		if (this.disableSpring) {
 			this.element.classList.add(styles.disableSpring);
 		}
@@ -194,6 +174,37 @@ export class DomLyricPlayer extends LyricPlayerBase {
 		for (const line of this.currentLyricLineObjects) {
 			line.update(deltaS);
 		}
+	}
+
+	override async calcLayout(force?: boolean, reflow?: boolean): Promise<void> {
+		await super.calcLayout(force, reflow);
+		let scrollToPos = this.currentLyricLineObjects
+			.slice(0, this.targetAlignIndex)
+			.reduce(
+				(acc, el) =>
+					acc +
+					(el.getLine().isBG ? 0 : (this.lyricLinesSize.get(el)?.[1] ?? 0)),
+				0,
+			);
+		scrollToPos -= this.size[1] * this.alignPosition;
+		const curLine = this.currentLyricLineObjects[this.targetAlignIndex];
+		if (curLine) {
+			const lineHeight = this.lyricLinesSize.get(curLine)?.[1] ?? 0;
+			switch (this.alignAnchor) {
+				case "bottom":
+					scrollToPos += lineHeight;
+					break;
+				case "center":
+					scrollToPos += lineHeight / 2;
+					break;
+				case "top":
+					break;
+			}
+		}
+		this.element.scrollTo({
+			top: scrollToPos,
+			behavior: "smooth",
+		});
 	}
 
 	override dispose(): void {

@@ -182,6 +182,9 @@ export const BackgroundRender = forwardRef<
 				const el = coreBGRenderRef.current.getElement();
 				el.style.width = "100%";
 				el.style.height = "100%";
+				el.style.minHeight = "0";
+				el.style.minWidth = "0";
+				el.style.overflow = "hidden";
 				wrapperRef.current?.appendChild(el);
 			}
 		}, [coreBGRenderRef.current]);

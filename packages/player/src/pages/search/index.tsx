@@ -128,7 +128,10 @@ export const Component: FC = () => {
 					</Button>
 				</Flex>
 				<TextField.Root
-					placeholder="搜索歌单、歌名、歌手等信息……"
+					placeholder={t(
+						"page.search.filter.placeholder",
+						"搜索歌单、歌名、歌手等信息……",
+					)}
 					mt="2"
 					value={keyword}
 					onChange={(evt) => setKeyword(evt.target.value)}
@@ -240,7 +243,9 @@ export const Component: FC = () => {
 				)}
 				{filters.length === 0 ? (
 					<Text as="div" color="gray" mt="4" align="center">
-						搜索歌曲、歌手、专辑、歌词、播放列表等信息
+						<Trans i18nKey="page.search.placeholder">
+							搜索歌曲、歌手、专辑、歌词、播放列表等信息
+						</Trans>
 					</Text>
 				) : (
 					<>
@@ -259,7 +264,13 @@ export const Component: FC = () => {
 						{songsSearchResult && songsSearchResult.length > 0 && (
 							<>
 								<Text as="div" mt="4">
-									搜索到 {songsSearchResult.length} 首歌曲
+									{t(
+										"page.search.searchSongResultAmount",
+										"搜索到 {amount} 首歌曲",
+										{
+											amount: playlistsSearchResult.length,
+										},
+									)}
 								</Text>
 
 								{songsSearchResult.map((song) => (
@@ -272,7 +283,7 @@ export const Component: FC = () => {
 						)}
 						{songsSearchResult?.length === 0 && (
 							<Text color="gray" align="center">
-								无歌曲结果
+								<Trans i18nKey="page.search.noSongResult">无歌曲结果</Trans>
 							</Text>
 						)}
 						{!playlistsSearchResult && (
@@ -284,14 +295,30 @@ export const Component: FC = () => {
 								align="center"
 							>
 								<Spinner />
-								<Text color="gray">搜索播放列表中</Text>
+								<Text color="gray">
+									<Trans i18nKey="page.search.searchingPlaylist">
+										搜索播放列表中
+									</Trans>
+								</Text>
 							</Flex>
 						)}
-						{playlistsSearchResult?.length === 0 && <Text>无播放列表结果</Text>}
+						{playlistsSearchResult?.length === 0 && (
+							<Text>
+								<Trans i18nKey="page.search.noPlaylistResult">
+									无播放列表结果
+								</Trans>
+							</Text>
+						)}
 						{playlistsSearchResult && playlistsSearchResult.length > 0 && (
 							<>
 								<Text as="div" mt="4">
-									搜索到 {playlistsSearchResult.length} 个播放列表
+									{t(
+										"page.search.searchPlaylistResultAmount",
+										"搜索到 {amount} 个播放列表",
+										{
+											amount: playlistsSearchResult.length,
+										},
+									)}
 								</Text>
 
 								{playlistsSearchResult.map((playlist) => (

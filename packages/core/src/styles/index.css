@@ -9,6 +9,7 @@
 	overflow: hidden;
 	max-width: 100%;
 	color: var(--amll-lp-color, white);
+	contain: strict;
 	mix-blend-mode: plus-lighter;
 	font-size: var(--amll-lp-font-size, max(max(4.7vh, 3.2vw), 12px));
 
@@ -20,6 +21,27 @@
 		box-sizing: content-box;
 		z-index: 1;
 		line-height: 1.2em;
+	}
+
+	&.dom-slim {
+		--amll-lp-line-width-aspect: 0.8;
+		--amll-lp-line-padding-x: 1em;
+		--amll-lp-bg-line-scale: 0.7;
+		overflow: hidden auto;
+		user-select: none;
+		box-sizing: content-box;
+		z-index: 1;
+		line-height: 1.2em;
+		min-height: 0;
+		min-width: 0;
+
+		&::-webkit-scrollbar {
+			display: none;
+		}
+
+		&:hover::-webkit-scrollbar {
+			display: block;
+		}
 	}
 }
 

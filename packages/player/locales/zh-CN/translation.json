@@ -75,20 +75,17 @@
       "title": "当前播放列表"
     }
   },
-  "ws-protocol": {
-    "toast": {
-      "switchSongNotSupported": "WS Protocol 模式下无法切换歌曲",
-      "pauseOrPlaySongNotSupported": "WS Protocol 模式下无法暂停 / 继续播放音乐",
-      "seekNotSupported": "WS Protocol 模式下无法修改播放进度",
-      "changeVolumeNotSupported": "WS Protocol 模式下无法修改音量"
-    }
-  },
   "page": {
-    "amll-dev": {
-      "title": "Apple Music Like Lyrics 开发者页面",
-      "warning": "此处的东西用于开发调试用途，仅供作者方便之用，随便使用可能有意想不到的情况出现！（页面内容仅中文）"
-    },
     "main": {
+      "playlistCard": {
+        "songCount": "{songAmount} 首歌曲",
+        "createTime": "创建于 {createTime}"
+      },
+      "playlistMenu": {
+        "play": "播放此列表",
+        "playShuffled": "以乱序播放此列表",
+        "delete": "删除"
+      },
       "updateAvailableTag": "有可用更新",
       "menu": {
         "enterWSProtocolMode": "进入 WS Protocol 模式",
@@ -97,9 +94,6 @@
         "settings": "设置"
       },
       "noPlaylistTip": "没有播放列表，快去新建一个吧！",
-      "playlistMenu": {
-        "delete": "删除"
-      },
       "loadingPlaylist": "加载歌单中"
     },
     "playlist": {
@@ -129,6 +123,33 @@
       "totalMusicLabel": "{count, plural, other {#}} 首歌曲",
       "playAll": "播放全部",
       "shufflePlayAll": "随机播放"
+    },
+    "amll-dev": {
+      "title": "Apple Music Like Lyrics 开发者页面",
+      "warning": "此处的东西用于开发调试用途，仅供作者方便之用，随便使用可能有意想不到的情况出现！（页面内容仅中文）"
+    },
+    "search": {
+      "filter": {
+        "placeholder": "搜索歌单、歌名、歌手等信息……",
+        "songName": "歌曲名 : {keyword}",
+        "artistName": "歌手名 : {keyword}",
+        "albumName": "专辑名 : {keyword}",
+        "playlistName": "播放列表名 : {keyword}",
+        "lyricContent": "歌词内容 : {keyword}",
+        "candidate": {
+          "songName": "歌曲名 包含 {keyword}",
+          "artistName": "歌手名 包含 {keyword}",
+          "albumName": "专辑名 包含 {keyword}",
+          "playlistName": "播放列表名称 包含 {keyword}",
+          "lyricContent": "歌词内容 包含 {keyword}"
+        }
+      },
+      "placeholder": "搜索歌曲、歌手、专辑、歌词、播放列表等信息",
+      "searchSongResultAmount": "搜索到 {amount} 首歌曲",
+      "noSongResult": "无歌曲结果",
+      "searchingPlaylist": "搜索播放列表中",
+      "noPlaylistResult": "无播放列表结果",
+      "searchPlaylistResultAmount": "搜索到 {amount} 个播放列表"
     },
     "settings": {
       "others": {
@@ -213,6 +234,7 @@
         "lyricPlayerImplementation": {
           "menu": {
             "dom": "DOM",
+            "dom-slim": "DOM（阉割版）",
             "canvas": "Canvas"
           },
           "label": "歌词播放器实现",
@@ -327,6 +349,14 @@
         "connectedClients": "已连接的客户端",
         "noClients": "无"
       }
+    }
+  },
+  "ws-protocol": {
+    "toast": {
+      "switchSongNotSupported": "WS Protocol 模式下无法切换歌曲",
+      "pauseOrPlaySongNotSupported": "WS Protocol 模式下无法暂停 / 继续播放音乐",
+      "seekNotSupported": "WS Protocol 模式下无法修改播放进度",
+      "changeVolumeNotSupported": "WS Protocol 模式下无法修改音量"
     }
   },
   "error": {

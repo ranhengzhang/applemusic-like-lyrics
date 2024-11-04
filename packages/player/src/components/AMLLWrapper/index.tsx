@@ -1,6 +1,7 @@
 import {
 	CanvasLyricPlayer,
 	DomLyricPlayer,
+	DomSlimLyricPlayer,
 	LyricPlayer,
 	MeshGradientRenderer,
 	PixiRenderer,
@@ -63,6 +64,11 @@ export const AMLLWrapper: FC = () => {
 			case LyricPlayerImplementation.Dom:
 				setLyricPlayerImplementation({
 					lyricPlayer: DomLyricPlayer,
+				});
+				break;
+			case LyricPlayerImplementation.DomSlim:
+				setLyricPlayerImplementation({
+					lyricPlayer: DomSlimLyricPlayer,
 				});
 				break;
 			case LyricPlayerImplementation.Canvas:

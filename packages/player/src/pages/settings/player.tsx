@@ -451,6 +451,13 @@ export const PlayerSettingsTab: FC = () => {
 			},
 			{
 				label: t(
+					"page.settings.lyricAppearance.lyricPlayerImplementation.menu.dom-slim",
+					"DOM（阉割版）",
+				),
+				value: LyricPlayerImplementation.DomSlim,
+			},
+			{
+				label: t(
 					"page.settings.lyricAppearance.lyricPlayerImplementation.menu.canvas",
 					"Canvas",
 				),
