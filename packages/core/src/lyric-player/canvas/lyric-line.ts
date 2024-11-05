@@ -1,7 +1,7 @@
-import type { CanvasLyricPlayer } from ".";
-import type { LyricLine } from "../../interfaces";
-import { chunkAndSplitLyricWords } from "../../utils/lyric-split-words";
-import { LyricLineBase } from "../base";
+import type { LyricLine } from "../../interfaces.ts";
+import { chunkAndSplitLyricWords } from "../../utils/lyric-split-words.ts";
+import { LyricLineBase } from "../base.ts";
+import type { CanvasLyricPlayer } from "./index.ts";
 import {
 	type TextLayoutConfig,
 	type TextLayoutResult,

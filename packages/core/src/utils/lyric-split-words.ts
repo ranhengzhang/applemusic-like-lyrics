@@ -1,4 +1,4 @@
-import type { LyricWord } from "../interfaces";
+import type { LyricWord } from "../interfaces.ts";
 
 const CJKEXP = /^[\p{Unified_Ideograph}\u0800-\u9FFC]+$/u;
 
@@ -25,12 +25,14 @@ export function chunkAndSplitLyricWords(
 					word: " ",
 					startTime: 0,
 					endTime: 0,
+					obscene: false,
 				});
 			}
 			let charPos = 0;
 			for (const s of splited) {
 				const word: LyricWord = {
 					word: s,
+					obscene: w.obscene,
 					startTime:
 						w.startTime + (charPos / realLength) * (w.endTime - w.startTime),
 					endTime:
@@ -42,6 +44,7 @@ export function chunkAndSplitLyricWords(
 					word: " ",
 					startTime: 0,
 					endTime: 0,
+					obscene: false,
 				});
 				charPos += s.length;
 			}

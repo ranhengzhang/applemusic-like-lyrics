@@ -4,10 +4,10 @@
  * @author SteveXMH
  */
 
-export { AbstractBaseRenderer, BaseRenderer } from "./base";
-import { AbstractBaseRenderer, BaseRenderer } from "./base";
-export { PixiRenderer } from "./pixi-renderer";
-export { MeshGradientRenderer } from "./mesh-renderer";
+export { AbstractBaseRenderer, BaseRenderer } from "./base.ts";
+export { MeshGradientRenderer } from "./mesh-renderer/index.ts";
+export { PixiRenderer } from "./pixi-renderer.ts";
+import type { AbstractBaseRenderer, BaseRenderer } from "./base.ts";
 
 export class BackgroundRender<Renderer extends BaseRenderer>
 	implements AbstractBaseRenderer
@@ -26,8 +26,8 @@ export class BackgroundRender<Renderer extends BaseRenderer>
 	static new<Renderer extends BaseRenderer>(type: {
 		new (canvas: HTMLCanvasElement): Renderer;
 	}): BackgroundRender<Renderer> {
-		const canvas = document.createElement("canvas");
-		return new BackgroundRender(new type(canvas), canvas);
+		const newCanvas = document.createElement("canvas");
+		return new BackgroundRender(new type(newCanvas), newCanvas);
 	}
 
 	setRenderScale(scale: number): void {

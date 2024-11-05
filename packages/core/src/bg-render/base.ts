@@ -1,4 +1,4 @@
-import { Disposable, HasElement } from "../interfaces";
+import type { Disposable, HasElement } from "../interfaces.ts";
 
 export abstract class AbstractBaseRenderer implements Disposable, HasElement {
 	/**
@@ -118,27 +118,27 @@ export abstract class BaseRenderer extends AbstractBaseRenderer {
 	 * 是否启用静态模式，即图片在更换后就会保持静止状态并禁用更新，以节省性能
 	 * @param enable 是否启用静态模式
 	 */
-	abstract setStaticMode(enable: boolean): void;
+	abstract override setStaticMode(enable: boolean): void;
 	/**
 	 * 修改背景动画帧率，默认是 30 FPS
 	 *
 	 * 如果设置成 0 则会停止动画
 	 * @param fps 目标帧率，默认 30 FPS
 	 */
-	abstract setFPS(fps: number): void;
+	abstract override setFPS(fps: number): void;
 	/**
 	 * 暂停背景动画，画面即便是更新了图片也不会发生变化
 	 */
-	abstract pause(): void;
+	abstract override pause(): void;
 	/**
 	 * 恢复播放背景动画
 	 */
-	abstract resume(): void;
+	abstract override resume(): void;
 	/**
 	 * 设置背景专辑资源，纹理加载并设置完成后会返回
 	 * @param albumSource 专辑的资源链接，可以是图片或视频链接，抑或是任意 img/video 元素，如果提供字符串链接且为视频则需要指定第二个参数
 	 */
-	abstract setAlbum(
+	abstract override setAlbum(
 		albumSource: string | HTMLImageElement | HTMLVideoElement,
 		isVideo?: boolean,
 	): Promise<void>;

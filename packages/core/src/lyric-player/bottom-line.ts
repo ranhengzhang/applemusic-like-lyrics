@@ -1,8 +1,8 @@
-import type { Disposable, HasElement } from "../interfaces";
+import type { Disposable, HasElement } from "../interfaces.ts";
 import styles from "../styles/lyric-player.module.css";
-import { measure } from "../utils/schedule.js";
-import { Spring } from "../utils/spring";
-import type { LyricPlayerBase } from "./base";
+import { measure } from "../utils/schedule.ts";
+import { Spring } from "../utils/spring.ts";
+import type { LyricPlayerBase } from "./base.ts";
 
 export class BottomLineEl implements HasElement, Disposable {
 	private element: HTMLElement = document.createElement("div");

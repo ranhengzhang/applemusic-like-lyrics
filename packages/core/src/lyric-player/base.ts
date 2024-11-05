@@ -4,13 +4,13 @@ import type {
 	HasElement,
 	LyricLine,
 	LyricWord,
-} from "../interfaces";
+} from "../interfaces.ts";
 import styles from "../styles/lyric-player.module.css";
-import { eqSet } from "../utils/eq-set";
-import { isCJK } from "../utils/is-cjk.js";
-import { Spring, type SpringParams } from "../utils/spring";
-import { BottomLineEl } from "./bottom-line";
-import { InterludeDots } from "./dom/interlude-dots";
+import { eqSet } from "../utils/eq-set.ts";
+import { isCJK } from "../utils/is-cjk.ts";
+import { Spring, type SpringParams } from "../utils/spring.ts";
+import { BottomLineEl } from "./bottom-line.ts";
+import { InterludeDots } from "./dom/interlude-dots.ts";
 
 /**
  * 歌词播放器的基类，已经包含了有关歌词操作和排版的功能，子类需要为其实现对应的显示展示操作

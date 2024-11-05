@@ -1,6 +1,6 @@
-import type { LyricLine } from "../../interfaces";
-import { LyricPlayerBase } from "../base";
-import { CanvasLyricLine } from "./lyric-line";
+import type { LyricLine } from "../../interfaces.ts";
+import { LyricPlayerBase } from "../base.ts";
+import { CanvasLyricLine } from "./lyric-line.ts";
 
 export class CanvasLyricPlayer extends LyricPlayerBase {
 	private canvasElement = document.createElement("canvas");

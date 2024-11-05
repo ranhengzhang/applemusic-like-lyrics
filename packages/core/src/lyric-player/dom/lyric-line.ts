@@ -1,12 +1,16 @@
 import bezier from "bezier-easing";
 import type { DomLyricPlayer } from ".";
-import type { LyricLine, LyricWord } from "../../interfaces";
+import type { LyricLine, LyricWord } from "../../interfaces.ts";
 import styles from "../../styles/lyric-player.module.css";
-import { chunkAndSplitLyricWords } from "../../utils/lyric-split-words";
-import { createMatrix4, matrix4ToCSS, scaleMatrix4 } from "../../utils/matrix";
-import { mutexifyFunction } from "../../utils/mutex.js";
-import { measure, mutate } from "../../utils/schedule";
-import { LyricLineBase } from "../base";
+import { chunkAndSplitLyricWords } from "../../utils/lyric-split-words.ts";
+import {
+	createMatrix4,
+	matrix4ToCSS,
+	scaleMatrix4,
+} from "../../utils/matrix.ts";
+import { mutexifyFunction } from "../../utils/mutex.ts";
+import { measure, mutate } from "../../utils/schedule.ts";
+import { LyricLineBase } from "../base.ts";
 
 interface RealWord extends LyricWord {
 	mainElement: HTMLSpanElement;

@@ -1,4 +1,4 @@
-import { getVelocity } from "./derivative";
+import { getVelocity } from "./derivative.ts";
 
 /** MIT License github.com/pushkine/ */
 export interface SpringParams {

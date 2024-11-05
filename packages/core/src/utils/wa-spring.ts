@@ -1,5 +1,5 @@
-import { Disposable } from "..";
 import bezier from "bezier-easing";
+import type { Disposable } from "../interfaces.ts";
 import { getVelocity } from "./derivative";
 
 export interface SpringParams {
@@ -23,7 +23,7 @@ type CSSStyleKeys = {
  */
 export class WebAnimationSpring extends EventTarget implements Disposable {
 	private currentAnimation: Animation;
-	private targetPosition: number = 0;
+	private targetPosition = 0;
 	private isStatic = true;
 	private params: Partial<SpringParams> = {};
 	private currentSolver: (t: seconds) => number = () => this.targetPosition;
@@ -33,7 +33,7 @@ export class WebAnimationSpring extends EventTarget implements Disposable {
 		private element: HTMLElement,
 		private styleName: CSSStyleKeys,
 		private valueGenerator: (value: number) => string,
-		private currentPosition: number = 0,
+		private currentPosition = 0,
 	) {
 		super();
 		this.targetPosition = currentPosition;
@@ -65,7 +65,7 @@ export class WebAnimationSpring extends EventTarget implements Disposable {
 				},
 			],
 			{
-				duration: Infinity,
+				duration: Number.POSITIVE_INFINITY,
 				id: `wa-spring-static-${this.styleName}`,
 				fill: "both",
 				easing: "cubic-bezier(0.5, 0, 0.5, 1)",
@@ -81,21 +81,18 @@ export class WebAnimationSpring extends EventTarget implements Disposable {
 	}
 
 	getCurrentPosition() {
-		if (this.isStatic || !this.currentAnimation.effect) {
+		if (this.isStatic || !this.currentAnimation.effect)
 			return this.currentPosition;
-		} else {
-			const timing = this.currentAnimation.effect?.getComputedTiming();
-			return this.currentSolver(timing.progress ?? 1);
-		}
+
+		const timing = this.currentAnimation.effect?.getComputedTiming();
+		return this.currentSolver(timing.progress ?? 1);
 	}
 
 	getCurrentVelocity() {
-		if (this.isStatic || !this.currentAnimation.effect) {
-			return 0;
-		} else {
-			const timing = this.currentAnimation.effect?.getComputedTiming();
-			return this.getV(timing.progress ?? 1);
-		}
+		if (this.isStatic || !this.currentAnimation.effect) return 0;
+
+		const timing = this.currentAnimation.effect?.getComputedTiming();
+		return this.getV(timing.progress ?? 1);
 	}
 
 	private onStepFinished() {

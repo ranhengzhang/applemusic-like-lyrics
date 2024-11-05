@@ -1,5 +1,4 @@
 import bezier from "bezier-easing";
-import type { DomLyricPlayer } from ".";
 import type { LyricLine, LyricWord } from "../../interfaces.ts";
 import { chunkAndSplitLyricWords } from "../../utils/lyric-split-words.ts";
 import {
@@ -11,6 +10,7 @@ import { mutexifyFunction } from "../../utils/mutex.ts";
 import { measure, mutate } from "../../utils/schedule.ts";
 import { LyricLineBase } from "../base.ts";
 import styles from "./index.module.css";
+import type { DomSlimLyricPlayer } from "./index.ts";
 
 interface RealWord extends LyricWord {
 	mainElement: HTMLSpanElement;
@@ -93,7 +93,7 @@ export class LyricLineEl extends LyricLineBase {
 	lineSize: number[] = [0, 0];
 
 	constructor(
-		private lyricPlayer: DomLyricPlayer,
+		private lyricPlayer: DomSlimLyricPlayer,
 		private lyricLine: LyricLine = {
 			words: [],
 			translatedLyric: "",

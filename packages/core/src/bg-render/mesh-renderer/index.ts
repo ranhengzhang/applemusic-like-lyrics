@@ -6,19 +6,19 @@
  */
 
 import { Mat4, Vec2, Vec3, Vec4 } from "gl-matrix";
-import type { Disposable } from "../../interfaces";
+import type { Disposable } from "../../interfaces.ts";
 import {
 	loadResourceFromElement,
 	loadResourceFromUrl,
-} from "../../utils/resource";
-import { BaseRenderer } from "../base";
+} from "../../utils/resource.ts";
+import { BaseRenderer } from "../base.ts";
 import {
 	blurImage,
 	brightnessImage,
 	contrastImage,
 	saturateImage,
-} from "../img";
-import { CONTROL_POINT_PRESETS } from "./cp-presets";
+} from "../img.ts";
+import { CONTROL_POINT_PRESETS } from "./cp-presets.ts";
 import meshFragShader from "./mesh.frag.glsl?raw";
 import meshVertShader from "./mesh.vert.glsl?raw";
 

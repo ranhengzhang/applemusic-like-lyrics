@@ -4,12 +4,12 @@
  * @author SteveXMH
  */
 
-import type { LyricLine } from "../../interfaces";
+import type { LyricLine } from "../../interfaces.ts";
 import "../../styles/index.css";
 import styles from "../../styles/lyric-player.module.css";
 import { debounce } from "../../utils/debounce.js";
-import { LyricPlayerBase } from "../base";
-import { LyricLineEl, type RawLyricLineMouseEvent } from "./lyric-line";
+import { LyricPlayerBase } from "../base.ts";
+import { LyricLineEl, type RawLyricLineMouseEvent } from "./lyric-line.ts";
 
 /**
  * 歌词行鼠标相关事件，可以获取到歌词行的索引和歌词行元素

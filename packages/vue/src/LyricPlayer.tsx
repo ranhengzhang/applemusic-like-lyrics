@@ -1,4 +1,5 @@
 import {
+	type BaseRenderer,
 	LyricPlayer as CoreLyricPlayer,
 	type LyricLine,
 	type LyricLineMouseEvent,
@@ -183,7 +184,7 @@ export interface LyricPlayerRef {
 	/**
 	 * 歌词播放实例
 	 */
-	lyricPlayer: Ref<CoreLyricPlayer | undefined>;
+	lyricPlayer: Ref<typeof CoreLyricPlayer | undefined>;
 	/**
 	 * 将歌词播放实例的元素包裹起来的 DIV 元素实例
 	 */

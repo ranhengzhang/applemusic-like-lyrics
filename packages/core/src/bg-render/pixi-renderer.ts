@@ -1,15 +1,15 @@
-import { Container } from "@pixi/display";
 import { Application } from "@pixi/app";
-import { BlurFilter } from "@pixi/filter-blur";
-import { ColorMatrixFilter } from "@pixi/filter-color-matrix";
 import { Texture } from "@pixi/core";
-import { Sprite } from "@pixi/sprite";
+import { Container } from "@pixi/display";
+import { BlurFilter } from "@pixi/filter-blur";
 import { BulgePinchFilter } from "@pixi/filter-bulge-pinch";
-import { BaseRenderer } from "./base";
+import { ColorMatrixFilter } from "@pixi/filter-color-matrix";
+import { Sprite } from "@pixi/sprite";
 import {
 	loadResourceFromElement,
 	loadResourceFromUrl,
 } from "../utils/resource";
+import { BaseRenderer } from "./base";
 
 class TimedContainer extends Container {
 	public time = 0;
@@ -87,7 +87,7 @@ export class PixiRenderer extends BaseRenderer {
 			}
 		}
 	};
-	constructor(protected canvas: HTMLCanvasElement) {
+	constructor(protected override canvas: HTMLCanvasElement) {
 		super(canvas);
 		this.app = new Application({
 			view: canvas,
@@ -120,9 +120,9 @@ export class PixiRenderer extends BaseRenderer {
 		c1.brightness(0.6, false);
 		const c2 = new ColorMatrixFilter();
 		c2.contrast(0.3, true);
-		this.app.stage.filters?.forEach((filter) => {
+		for (const filter of this.app.stage.filters ?? []) {
 			filter.destroy();
-		});
+		}
 		this.app.stage.filters = [];
 		this.app.stage.filters.push(new BlurFilter(5, 1));
 		this.app.stage.filters.push(new BlurFilter(10, 1));
