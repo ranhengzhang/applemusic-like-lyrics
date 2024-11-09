@@ -19,6 +19,7 @@ export interface Song {
 	songArtists: string;
 	songAlbum: string;
 	cover: Blob;
+	cachedThumbnail?: Blob;
 	duration: number;
 	lyricFormat: string;
 	lyric: string;

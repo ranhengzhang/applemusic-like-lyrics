@@ -77,6 +77,17 @@ function App() {
 		})();
 	}, []);
 
+	useEffect(() => {
+		(async () => {
+			const win = getCurrentWindow();
+			if (isDarkTheme) {
+				await win.setTheme("dark");
+			} else {
+				await win.setTheme("light");
+			}
+		})();
+	}, [isDarkTheme]);
+
 	useLayoutEffect(() => {
 		console.log("displayLanguage", displayLanguage, i18n);
 		i18n.changeLanguage(displayLanguage);

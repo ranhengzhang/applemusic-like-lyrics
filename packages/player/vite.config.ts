@@ -10,6 +10,8 @@ import svgr from "vite-plugin-svgr";
 import topLevelAwait from "vite-plugin-top-level-await";
 import wasm from "vite-plugin-wasm";
 
+const host = process.env.TAURI_DEV_HOST;
+
 function getCommitHash() {
 	try {
 		return execSync("git rev-parse HEAD", { stdio: "pipe" })
@@ -82,7 +84,7 @@ const ReactCompilerConfig = {
 };
 
 // https://vitejs.dev/config/
-export default defineConfig(async () => ({
+export default defineConfig({
 	build: {
 		modulePreload: {
 			polyfill: false,
@@ -138,7 +140,7 @@ export default defineConfig(async () => ({
 	// 2. tauri expects a fixed port, fail if that port is not available
 	server: {
 		port: 1420,
-		host: process.env.TAURI_DEV_HOST || undefined,
+		host: host || false,
 		strictPort: true,
 		warmup: {
 			clientFiles: [
@@ -148,8 +150,15 @@ export default defineConfig(async () => ({
 				"src/**/*.svg?react",
 			],
 		},
+		hmr: host
+			? {
+					protocol: "ws",
+					host,
+					port: 1421,
+				}
+			: undefined,
 	},
 	// 3. to make use of `TAURI_DEBUG` and other env variables
 	// https://tauri.studio/v1/api/config#buildconfig.beforedevcommand
 	envPrefix: ["VITE_", "TAURI_"],
-}));
+});

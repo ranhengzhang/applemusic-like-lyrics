@@ -983,10 +983,13 @@ export class MeshGradientRenderer extends BaseRenderer {
 			);
 			newMesh.resetSubdivition(15);
 
-			const chosenPreset =
-				CONTROL_POINT_PRESETS[
-					Math.floor(Math.random() * CONTROL_POINT_PRESETS.length)
-				];
+			const chosenPresetIndex = Math.floor(
+				Math.random() * CONTROL_POINT_PRESETS.length,
+			);
+			if (import.meta.env.DEV) {
+				console.log("Choosed preset index", chosenPresetIndex);
+			}
+			const chosenPreset = CONTROL_POINT_PRESETS[chosenPresetIndex];
 			newMesh.resizeControlPoints(chosenPreset.width, chosenPreset.height);
 			const uPower = 2 / (chosenPreset.width - 1);
 			const vPower = 2 / (chosenPreset.height - 1);

@@ -51,6 +51,7 @@ export const MetadataTabContent: FC = () => {
 			if (file === undefined) return;
 			db.songs.update(song, (song) => {
 				song.cover = file;
+				song.cachedThumbnail = undefined;
 			});
 		};
 		input.click();
@@ -73,6 +74,7 @@ export const MetadataTabContent: FC = () => {
 				const coverBlob = new Blob([coverData], { type: "image" });
 
 				song.cover = coverBlob;
+				song.cachedThumbnail = undefined;
 			}
 		});
 	}, [song]);

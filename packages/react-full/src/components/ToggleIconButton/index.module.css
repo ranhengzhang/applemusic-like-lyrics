@@ -5,6 +5,7 @@
 	display: flex;
 	justify-content: center;
 	align-items: center;
+	color: currentColor;
 
 	opacity: 0.45;
 	width: 4em;

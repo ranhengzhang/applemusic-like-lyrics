@@ -200,14 +200,14 @@ export async function restartApp(): Promise<never> {
 export async function emitAudioThread<
 	D extends AudioThreadMessage,
 	T extends D["type"],
->(msgType: T, data: Omit<AudioThreadMessage, "type"> = {}): Promise<void> {
+>(msgType: T, data?: Omit<D, "type">): Promise<void> {
 	const id = uid(32) + Date.now();
 	await invoke("local_player_send_msg", {
 		msg: {
 			callbackId: id,
 			data: {
 				type: msgType,
-				...data,
+				...(data ?? {}),
 			},
 		} as AudioThreadEventMessage<D>,
 	});
@@ -216,7 +216,7 @@ export async function emitAudioThread<
 export function emitAudioThreadRet<
 	D extends AudioThreadMessage,
 	T extends D["type"],
->(msgType: T, data: Omit<AudioThreadMessage, "type"> = {}): Promise<unknown> {
+>(msgType: T, data?: Omit<D, "type">): Promise<unknown> {
 	const id = `${uid(32)}-${Date.now()}`;
 	return new Promise((resolve) => {
 		msgTasks.set(id, resolve);
@@ -225,7 +225,7 @@ export function emitAudioThreadRet<
 				callbackId: id,
 				data: {
 					type: msgType,
-					...data,
+					...(data ?? {}),
 				},
 			} as AudioThreadEventMessage<D>,
 		});

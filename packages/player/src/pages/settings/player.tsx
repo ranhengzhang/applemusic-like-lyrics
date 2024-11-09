@@ -56,9 +56,11 @@ import { branch, commit } from "virtual:git-metadata-plugin";
 import resources from "virtual:i18next-loader";
 import { router } from "../../router.tsx";
 import {
+	DarkMode,
 	LyricPlayerImplementation,
 	advanceLyricDynamicLyricTimeAtom,
 	backgroundRendererAtom,
+	darkModeAtom,
 	displayLanguageAtom,
 	fftDataRangeAtom,
 	lyricPlayerImplementationAtom,
@@ -126,7 +128,7 @@ const SwitchSettings: FC<
 	);
 };
 
-function SelectSettings<T extends string>({
+function SelectSettings<T>({
 	label,
 	description,
 	menu,
@@ -142,11 +144,17 @@ function SelectSettings<T extends string>({
 
 	return (
 		<SettingEntry label={label} description={description}>
-			<Select.Root value={value} onValueChange={setValue}>
+			<Select.Root
+				value={value as string}
+				onValueChange={(v) => setValue(v as T)}
+			>
 				<Select.Trigger />
 				<Select.Content>
 					{menu.map((item) => (
-						<Select.Item key={item.value} value={item.value}>
+						<Select.Item
+							key={item.value as string}
+							value={item.value as string}
+						>
 							{item.label}
 						</Select.Item>
 					))}
@@ -496,6 +504,28 @@ export const PlayerSettingsTab: FC = () => {
 				label={t("page.settings.general.displayLanguage.label", "显示语言")}
 				menu={supportedLanguagesMenu}
 				configAtom={displayLanguageAtom}
+			/>
+			<SelectSettings
+				label={t("page.settings.general.theme.label", "界面主题")}
+				description={t(
+					"page.settings.general.theme.description",
+					"不太稳定，建议设置后重启以正确应用主题样式",
+				)}
+				menu={[
+					{
+						label: t("page.settings.general.theme.auto", "自动"),
+						value: DarkMode.Auto,
+					},
+					{
+						label: t("page.settings.general.theme.light", "浅色"),
+						value: DarkMode.Light,
+					},
+					{
+						label: t("page.settings.general.theme.dark", "深色"),
+						value: DarkMode.Dark,
+					},
+				]}
+				configAtom={darkModeAtom}
 			/>
 			<SubTitle>
 				<Trans i18nKey="page.settings.lyricContent.subtitle">歌词内容</Trans>

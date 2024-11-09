@@ -14,7 +14,7 @@
     <!-- 为了避免加载主脚本时无法控制窗口，故独立编写标题栏的脚本 -->
     <div data-tauri-drag-region id="system-titlebar">
         <div id="system-titlebar-buttons">
-            <button id="system-titlebar-minimize" class="system-button">
+            <button id="system-titlebar-minimize" class="system-button" style="color: currentColor;">
                 <svg class="windows" width="10" height="2" viewBox="0 0 10 2" fill="none"
                     xmlns="http://www.w3.org/2000/svg">
                     <path
@@ -22,7 +22,7 @@
                         fill="currentColor" fill-opacity="0.8956" />
                 </svg>
             </button>
-            <button id="system-titlebar-resize" class="system-button">
+            <button id="system-titlebar-resize" class="system-button" style="color: currentColor;">
                 <svg class="windows maximize" width="10" height="11" viewBox="0 0 10 11" fill="none"
                     xmlns="http://www.w3.org/2000/svg">
                     <path
@@ -36,7 +36,7 @@
                         fill="currentColor" fill-opacity="0.8956" />
                 </svg>
             </button>
-            <button id="system-titlebar-close" class="system-button">
+            <button id="system-titlebar-close" class="system-button" style="color: currentColor;">
                 <svg class="windows" width="10" height="11" viewBox="0 0 10 11" fill="none"
                     xmlns="http://www.w3.org/2000/svg">
                     <path
@@ -46,6 +46,10 @@
             </button>
         </div>
         <style scoped>
+            body[data-amll-lyrics-open] #system-titlebar {
+                color: white;
+            }
+
             #system-titlebar {
                 z-index: 10000;
                 display: flex;
@@ -57,7 +61,13 @@
                 flex-direction: row;
                 /* 因为有可能是移动设备，默认隐藏标题栏 */
                 display: none;
-                color: white;
+                color: black;
+            }
+
+            @media (prefers-color-scheme: dark) {
+                #system-titlebar {
+                    color: white;
+                }
             }
 
             #system-titlebar.fullscreen {

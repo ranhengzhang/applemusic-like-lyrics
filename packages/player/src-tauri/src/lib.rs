@@ -153,6 +153,7 @@ fn recreate_window(app: &AppHandle) {
             effects: vec![Effect::Tabbed, Effect::Mica],
             ..Default::default()
         })
+        .theme(None)
         .title({
             #[cfg(target_os = "macos")]
             {

@@ -7,7 +7,8 @@
       "toggleFullscreen": "全屏 / 取消全屏",
       "toggleLyrics": "显示歌词",
       "editMusicOverrideMessage": "编辑歌曲覆盖信息",
-      "exitLyricPage": "退出歌词页面"
+      "exitLyricPage": "退出歌词页面",
+      "play": "播放"
     },
     "audioQuality": {
       "title": "音频解码信息",
@@ -186,7 +187,14 @@
           "cimode": "本地化 ID",
           "label": "显示语言"
         },
-        "subtitle": "常规"
+        "subtitle": "常规",
+        "theme": {
+          "label": "界面主题",
+          "description": "不太稳定，建议设置后重启以正确应用主题样式",
+          "auto": "自动",
+          "light": "浅色",
+          "dark": "深色"
+        }
       },
       "musicInfoAppearance": {
         "playerControlsType": {

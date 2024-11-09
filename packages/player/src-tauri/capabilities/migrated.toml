@@ -39,6 +39,8 @@ identifier = "core:window:allow-set-effects"
 [[permissions]]
 identifier = "core:window:allow-show"
 [[permissions]]
+identifier = "core:window:allow-set-theme"
+[[permissions]]
 identifier = "shell:default"
 [[permissions]]
 identifier = "fs:default"

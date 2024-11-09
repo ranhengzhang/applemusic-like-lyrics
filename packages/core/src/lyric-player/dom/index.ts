@@ -142,6 +142,9 @@ export class DomLyricPlayer extends LyricPlayerBase {
 		} else {
 			this.element.classList.remove(styles.hasDuetLine);
 		}
+		if (!this.supportMaskImage) {
+			this.element.style.setProperty("--amll-player-time", `${initialTime}`);
+		}
 
 		for (const line of this.currentLyricLineObjects) {
 			line.removeMouseEventListener("click", this.onLineClickedHandler);
@@ -187,6 +190,12 @@ export class DomLyricPlayer extends LyricPlayerBase {
 	override update(delta = 0) {
 		if (!this.initialLayoutFinished) return;
 		super.update(delta);
+		if (!this.supportMaskImage) {
+			this.element.style.setProperty(
+				"--amll-player-time",
+				`${this.currentTime}`,
+			);
+		}
 		if (!this.isPageVisible) return;
 		const deltaS = delta / 1000;
 		this.interludeDots.update(delta);
