@@ -733,6 +733,7 @@ export class MeshGradientRenderer extends BaseRenderer {
 	) as HTMLCanvasElement;
 	private targetSize = Vec2.fromValues(0, 0);
 	private currentSize = Vec2.fromValues(0, 0);
+	private isNoCover = true;
 	private meshStates: MeshState[] = [];
 	private _disposed = false;
 
@@ -812,16 +813,34 @@ export class MeshGradientRenderer extends BaseRenderer {
 			latestMeshState.mesh.bind();
 			// 考虑到我们并不逐帧更新网格控制点，因此也不需要重复调用 updateMesh
 			if (this.manualControl) latestMeshState.mesh.updateMesh();
-			latestMeshState.alpha = Math.min(1, latestMeshState.alpha + delta / 500);
-			if (latestMeshState.alpha >= 1) {
-				const deleted = this.meshStates.splice(0, this.meshStates.length - 1);
+			if (this.isNoCover) {
+				for (const state of this.meshStates) {
+					state.alpha = Math.max(0, state.alpha - delta / 500);
+				}
+				const deleted = this.meshStates.filter((s) => s.alpha === 0);
+				this.meshStates = this.meshStates.filter((s) => s.alpha > 0);
 				for (const state of deleted) {
 					state.mesh.dispose();
 					state.texture.dispose();
 				}
-			}
-			if (this.meshStates.length === 1 && latestMeshState.alpha >= 1) {
-				canBeStatic = true;
+				if (this.meshStates.length === 0) {
+					canBeStatic = true;
+				}
+			} else {
+				latestMeshState.alpha = Math.min(
+					1,
+					latestMeshState.alpha + delta / 500,
+				);
+				if (latestMeshState.alpha >= 1) {
+					const deleted = this.meshStates.splice(0, this.meshStates.length - 1);
+					for (const state of deleted) {
+						state.mesh.dispose();
+						state.texture.dispose();
+					}
+				}
+				if (this.meshStates.length === 1 && latestMeshState.alpha >= 1) {
+					canBeStatic = true;
+				}
 			}
 		}
 
@@ -922,11 +941,16 @@ export class MeshGradientRenderer extends BaseRenderer {
 		this.requestTick();
 	}
 	override async setAlbum(
-		albumSource: string | HTMLImageElement | HTMLVideoElement,
+		albumSource?: string | HTMLImageElement | HTMLVideoElement,
 		isVideo?: boolean,
 	): Promise<void> {
-		if (typeof albumSource === "string" && albumSource.trim().length === 0)
-			throw new Error("Empty album url");
+		if (
+			albumSource === undefined ||
+			(typeof albumSource === "string" && albumSource.trim().length === 0)
+		) {
+			this.isNoCover = true;
+			return;
+		}
 		let res: HTMLImageElement | HTMLVideoElement | null = null;
 		let remainRetryTimes = 5;
 		while (!res && remainRetryTimes > 0) {
@@ -947,7 +971,12 @@ export class MeshGradientRenderer extends BaseRenderer {
 				remainRetryTimes--;
 			}
 		}
-		if (!res) return;
+		if (!res) {
+			console.error("Failed to load album resource", albumSource);
+			this.isNoCover = true;
+			return;
+		}
+		this.isNoCover = false;
 		// resize image
 		const c = this.reduceImageSizeCanvas;
 		const ctx = c.getContext("2d", {

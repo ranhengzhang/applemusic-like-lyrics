@@ -282,8 +282,11 @@ const LyricContext: FC = () => {
 			let synced = 0;
 			let errored = 0;
 
-			await Promise.all(
-				shouldFetchList.keys().map(async (fileName: string) => {
+			const fetchTasks = [];
+			
+			// Safari 目前不支持对迭代器对象使用 map 方法
+			for (const fileName of shouldFetchList.keys()) {
+				fetchTasks.push((async () => {
 					const lyricRes = await fetch(fileMap[fileName].download_url, {
 						signal: sig.signal,
 						redirect: "follow",
@@ -315,8 +318,10 @@ const LyricContext: FC = () => {
 						console.warn("下载并解析歌词文件", fileName, "失败", err);
 						errored++;
 					}
-				}),
-			);
+				})())
+			}
+			
+			await Promise.all(fetchTasks);
 
 			console.log(
 				TTML_LOG_TAG,

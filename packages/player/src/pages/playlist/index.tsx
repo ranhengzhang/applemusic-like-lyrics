@@ -158,8 +158,8 @@ export const Component: FC = () => {
 					if (platform() !== "android" && platform() !== "ios") {
 						normalized = (await path.normalize(v)).replace(/\\/gi, "/");
 					}
-					console.log(await stat(v));
 					try {
+						console.log(await stat(v));
 						const pathMd5 = md5(normalized);
 						const musicInfo = await readLocalMusicMetadata(normalized);
 

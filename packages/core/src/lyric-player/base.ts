@@ -410,26 +410,28 @@ export abstract class LyricPlayerBase
 		this.hasDuetLine = this.processedLines.some((line) => line.isDuet);
 
 		// 将行间有较短空隙的两个歌词行的结束时间拉长，与下一行歌词行的开始时间一致，以便于更好的显示
-		this.processedLines.forEach((line, i, lines) => {
-			const nextLine = lines[i + 1];
-			const lastWord = line.words[line.words.length - 1];
-			if (lastWord) {
-				if (nextLine) {
-					if (nextLine.startTime > line.endTime) {
-						line.endTime = Math.min(line.endTime + 1500, nextLine.startTime);
-					}
-				} else {
-					line.endTime = line.endTime + 1500;
-				}
-			}
-		});
+		// Update: 感觉还是不太适用，所以移除了
+		// this.processedLines.forEach((line, i, lines) => {
+		// 	const nextLine = lines[i + 1];
+		// 	const lastWord = line.words[line.words.length - 1];
+		// 	if (lastWord) {
+		// 		if (nextLine) {
+		// 			if (nextLine.startTime > line.endTime) {
+		// 				line.endTime = Math.min(line.endTime + 1500, nextLine.startTime);
+		// 			}
+		// 		} else {
+		// 			line.endTime = line.endTime + 1500;
+		// 		}
+		// 	}
+		// });
 
-		// 让背景歌词和上一行歌词一同出现
+		// 让背景歌词和上一行歌词一同出现并一同消失
 		this.processedLines.forEach((line, i, lines) => {
 			if (line.isBG) return;
 			const nextLine = lines[i + 1];
 			if (nextLine?.isBG) {
 				nextLine.startTime = Math.min(nextLine.startTime, line.startTime);
+				nextLine.endTime = Math.max(nextLine.endTime, line.endTime);
 			}
 		});
 		for (const line of this.currentLyricLineObjects) {
@@ -440,6 +442,9 @@ export abstract class LyricPlayerBase
 		this.hotLines.clear();
 		this.bufferedLines.clear();
 		this.setCurrentTime(0, true);
+		if (import.meta.env.DEV) {
+			console.log("歌词处理完成", this.processedLines);
+		}
 	}
 
 	/**
@@ -460,15 +465,7 @@ export abstract class LyricPlayerBase
 		// 如果当前所有缓冲行都将被删除且没有新热行加入，则删除所有缓冲行，且也不会修改当前滚动位置
 		// 如果当前所有缓冲行都将被删除且有新热行加入，则删除所有缓冲行并加入新热行作为缓冲行，然后修改当前滚动位置
 
-		// this.initializeSeeking = isSeek;
 		this.currentTime = time;
-		// if (Math.abs(this.currentTime - this.lastCurrentTime) >= 100) {
-		// 	this.initializeSeeking = true;
-		// } else this.initializeSeeking = false;
-		// if (!this.isPageVisible) return;
-		// if (!this._getIsNonDynamic() && !this.supportMaskImage)
-		// 	this.element.style.setProperty("--amll-player-time", `${time}`);
-		// if (this.isScrolled) return;
 
 		if (!this.initialLayoutFinished && !isSeek) return;
 

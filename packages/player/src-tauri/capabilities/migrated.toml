@@ -54,7 +54,7 @@ identifier = "fs:allow-rename"
 identifier = "fs:allow-remove"
 [[permissions]]
 identifier = "fs:scope"
-allow = ["$APPDATA/**"]
+allow = ["$APPDATA/**", "$HOME/**"]
 [[permissions]]
 identifier = "fs:allow-stat"
 [[permissions]]

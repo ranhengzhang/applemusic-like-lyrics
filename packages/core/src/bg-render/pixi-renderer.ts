@@ -195,10 +195,13 @@ export class PixiRenderer extends BaseRenderer {
 	}
 
 	override async setAlbum(
-		albumSource: string | HTMLImageElement | HTMLVideoElement,
+		albumSource?: string | HTMLImageElement | HTMLVideoElement,
 		isVideo?: boolean,
 	): Promise<void> {
-		if (typeof albumSource === "string" && albumSource.trim().length === 0)
+		if (
+			!albumSource ||
+			(typeof albumSource === "string" && albumSource.trim().length === 0)
+		)
 			return;
 		let res: HTMLImageElement | HTMLVideoElement | null = null;
 		let remainRetryTimes = 5;
