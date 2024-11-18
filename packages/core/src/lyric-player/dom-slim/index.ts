@@ -178,30 +178,35 @@ export class DomSlimLyricPlayer extends LyricPlayerBase {
 
 	override async calcLayout(force?: boolean, reflow?: boolean): Promise<void> {
 		await super.calcLayout(force, reflow);
-		let scrollToPos = this.currentLyricLineObjects
-			.slice(0, this.targetAlignIndex)
-			.reduce(
-				(acc, el) =>
-					acc +
-					(el.getLine().isBG ? 0 : (this.lyricLinesSize.get(el)?.[1] ?? 0)),
-				0,
-			);
-		scrollToPos -= this.size[1] * this.alignPosition;
 		const curLine = this.currentLyricLineObjects[this.targetAlignIndex];
+		const curLineEl = curLine.getElement();
+		const curLineVisibility = curLineEl.checkVisibility({
+			contentVisibilityAuto: true,
+		});
+		const playerTop = this.element.getBoundingClientRect().top;
+		if (!curLineVisibility) {
+			curLineEl.scrollIntoView({
+				block: "center",
+				behavior: "instant",
+			});
+		}
+		const curLineHeight = curLineEl.clientHeight;
+		const curLineRect = curLineEl.getBoundingClientRect();
+		let scrollToPos =
+			curLineRect.top - playerTop - this.size[1] * this.alignPosition;
 		if (curLine) {
-			const lineHeight = this.lyricLinesSize.get(curLine)?.[1] ?? 0;
 			switch (this.alignAnchor) {
 				case "bottom":
-					scrollToPos += lineHeight;
+					scrollToPos += curLineHeight;
 					break;
 				case "center":
-					scrollToPos += lineHeight / 2;
+					scrollToPos += curLineHeight / 2;
 					break;
 				case "top":
 					break;
 			}
 		}
-		this.element.scrollTo({
+		this.element.scrollBy({
 			top: scrollToPos,
 			behavior: "smooth",
 		});

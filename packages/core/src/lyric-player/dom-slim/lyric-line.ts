@@ -678,6 +678,12 @@ export class LyricLineEl extends LyricLineBase {
 		return this.markImageDirtyPromise;
 	}
 	async updateMaskImage() {
+		if (
+			!this.element.checkVisibility({
+				contentVisibilityAuto: true,
+			})
+		)
+			return;
 		this.maskImageDirty = false;
 		await this.measureLock(async () => {
 			await Promise.all(

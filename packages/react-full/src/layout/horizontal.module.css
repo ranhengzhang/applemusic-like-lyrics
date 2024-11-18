@@ -55,6 +55,7 @@
 .thumb {
 	grid-column: info-side;
 	grid-row: thumb;
+	will-change: transform;
 	justify-self: center;
 	margin: 2vh;
 
@@ -78,6 +79,7 @@
 .controls {
 	grid-column: info-side;
 	grid-row: music-info;
+	will-change: transform;
 	justify-self: center;
 
 	mix-blend-mode: plus-lighter;
