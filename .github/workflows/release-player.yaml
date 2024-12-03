@@ -74,6 +74,9 @@ jobs:
       - name: 构建 AMLL Full React 包
         run: |
           pnpm i
+          cd packages/lyric
+          pnpm build
+          cd ../..
           pnpm -F player tauri build
         env:
           AMLL_GITHUB_IS_ACTION: true
