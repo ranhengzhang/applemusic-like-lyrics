@@ -28,6 +28,14 @@
 	"productName": "AMLL Player",
 	"version": "0.0.1",
 	"identifier": "net.stevexmh.amllplayer",
+	"plugins": {
+		"updater": {
+			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUwRDMyRjg2MjUxMDNBNgpSV1NtQTFGaStESU5CUVp0UlVBelZEUXdSQ1VEK2dOOWtNL01CUzcyUENEZ2FiaG1PYnBLL010Vwo=",
+			"endpoints": [
+				"https://github.com/Steve-xmh/applemusic-like-lyrics/releases/download/full-refractor-player-dev/latest.json"
+			]
+		}
+	},
 	"app": {
 		"withGlobalTauri": true,
 		"windows": []
