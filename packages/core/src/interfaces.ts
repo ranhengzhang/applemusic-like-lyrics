@@ -50,6 +50,8 @@ export interface LyricWord extends LyricWordBase {
 	obscene?: boolean;
 	/** 单词的注音内容 */
 	ruby?: LyricWordBase[];
+	/** 标记该单词是否为 ruby 短语的开始 */
+	rubyPhraseStart?: boolean;
 }
 
 /** 一行歌词，存储多个单词 */

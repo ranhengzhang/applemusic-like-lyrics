@@ -3,6 +3,7 @@ import {
 	type LyricLine,
 	LyricLineRenderMode,
 	type LyricWord,
+	type LyricWordBase,
 } from "../../interfaces.ts";
 import styles from "../../styles/lyric-player.module.css";
 import { isCJK } from "../../utils/is-cjk.ts";
@@ -24,6 +25,14 @@ interface RealWord extends LyricWord {
 	height: number;
 	padding: number;
 	shouldEmphasize: boolean;
+	/** rubyWord 元素，用于动画 */
+	rubyWordEl?: HTMLDivElement;
+	/** wordBody 元素，用于动画 */
+	wordBodyEl?: HTMLDivElement;
+	/** 是否是 ruby 短语的起始单词 */
+	isRubyPhraseStart?: boolean;
+	/** 被合并到该单词的其他单词（用于 ruby 短语） */
+	mergedWords?: LyricWord[];
 }
 
 const ANIMATION_FRAME_QUANTITY = 32;
@@ -94,6 +103,13 @@ export class LyricLineEl extends LyricLineBase {
 
 	private targetBrightAlpha = 1.0;
 	private targetDarkAlpha = 0.2;
+
+	// 跟踪最后一个创建的带有 ruby 的 wordWithRuby 元素，用于合并没有 rubyPhraseStart 的单词
+	private lastWordWithRuby: {
+		mainElement: HTMLSpanElement;
+		rubyWordEl: HTMLDivElement;
+		wordBodyEl: HTMLDivElement;
+	} | null = null;
 
 	constructor(
 		private lyricPlayer: DomLyricPlayer,
@@ -393,6 +409,8 @@ export class LyricLineEl extends LyricLineBase {
 
 	override rebuildElement() {
 		this.disposeElements();
+		// 重置 lastWordWithRuby，确保每行歌词开始时都是干净的状态
+		this.lastWordWithRuby = null;
 		const main = this.element.children[0] as HTMLDivElement;
 		const trans = this.element.children[1] as HTMLDivElement;
 		const roman = this.element.children[2] as HTMLDivElement;
@@ -438,6 +456,64 @@ export class LyricLineEl extends LyricLineBase {
 		);
 	}
 
+	/**
+	 * 将单词合并到前一个 wordWithRuby 中
+	 * 用于处理没有 rubyPhraseStart 标记的 ruby 单词
+	 */
+	private mergeWordToLastWordWithRuby(
+		word: LyricWord,
+		shouldEmphasize: boolean,
+		hasRomanLine: boolean,
+	) {
+		if (!this.lastWordWithRuby) return;
+
+		const { rubyWordEl, wordBodyEl } = this.lastWordWithRuby;
+		const romanWord = word.romanWord?.trim() ?? "";
+
+		// 合并 ruby 部分
+		const rubySegments = this.getRubySegments(word);
+		for (const ruby of rubySegments) {
+			const rubyPartEl = document.createElement("span");
+			rubyPartEl.innerText = ruby.word;
+			rubyPartEl.dataset.startTime = String(ruby.startTime);
+			rubyPartEl.dataset.endTime = String(ruby.endTime);
+			rubyWordEl.appendChild(rubyPartEl);
+		}
+
+		// 创建 wordBody 的子元素
+		const wordContentEl = document.createElement("span");
+
+		if (shouldEmphasize) {
+			wordContentEl.classList.add(styles.emphasize);
+			for (const char of word.word.trim()) {
+				const charEl = document.createElement("span");
+				charEl.innerText = char;
+				wordContentEl.appendChild(charEl);
+			}
+		} else {
+			if (hasRomanLine) {
+				const wordEl = document.createElement("div");
+				wordEl.innerText = word.word.trim();
+				wordContentEl.appendChild(wordEl);
+			} else {
+				// 总是创建一个 div 来包裹单词文本，保持 DOM 结构一致
+				const wordEl = document.createElement("div");
+				wordEl.innerText = word.word.trim();
+				wordContentEl.appendChild(wordEl);
+			}
+		}
+
+		// 添加 romanWord
+		if (hasRomanLine) {
+			const romanWordEl = document.createElement("div");
+			romanWordEl.innerText = romanWord.length > 0 ? romanWord : "\u00A0";
+			romanWordEl.classList.add(styles.romanWord);
+			wordContentEl.appendChild(romanWordEl);
+		}
+
+		wordBodyEl.appendChild(wordContentEl);
+	}
+
 	private createWord(
 		word: LyricWord,
 		shouldEmphasize: boolean,
@@ -450,9 +526,10 @@ export class LyricLineEl extends LyricLineBase {
 		const wordContainer = hasRubyLine
 			? document.createElement("div")
 			: mainWordEl;
+		let rubyWordEl: HTMLDivElement | undefined;
 
 		if (hasRubyLine) {
-			const rubyWordEl = document.createElement("div");
+			rubyWordEl = document.createElement("div");
 			const rubySegments = this.getRubySegments(word);
 			for (const ruby of rubySegments) {
 				const rubyPartEl = document.createElement("span");
@@ -468,21 +545,30 @@ export class LyricLineEl extends LyricLineBase {
 			mainWordEl.appendChild(wordContainer);
 		}
 
+		// 创建 span 包裹单词内容，保持 DOM 结构一致性
+		const wordContentEl = hasRubyLine ? document.createElement("span") : wordContainer;
+		if (hasRubyLine) {
+			wordContainer.appendChild(wordContentEl);
+		}
+
 		if (shouldEmphasize) {
 			mainWordEl.classList.add(styles.emphasize);
 			for (const char of word.word.trim()) {
 				const charEl = document.createElement("span");
 				charEl.innerText = char;
 				subElements.push(charEl);
-				wordContainer.appendChild(charEl);
+				wordContentEl.appendChild(charEl);
 			}
 		} else {
 			if (hasRomanLine) {
 				const wordEl = document.createElement("div");
 				wordEl.innerText = word.word.trim();
-				wordContainer.appendChild(wordEl);
-			} else if (romanWord.length === 0) {
-				wordContainer.innerText = word.word.trim();
+				wordContentEl.appendChild(wordEl);
+			} else {
+				// 总是创建一个 div 来包裹单词文本，保持 DOM 结构一致
+				const wordEl = document.createElement("div");
+				wordEl.innerText = word.word.trim();
+				wordContentEl.appendChild(wordEl);
 			}
 		}
 
@@ -490,7 +576,7 @@ export class LyricLineEl extends LyricLineBase {
 			const romanWordEl = document.createElement("div");
 			romanWordEl.innerText = romanWord.length > 0 ? romanWord : "\u00A0";
 			romanWordEl.classList.add(styles.romanWord);
-			wordContainer.appendChild(romanWordEl);
+			wordContentEl.appendChild(romanWordEl);
 		}
 
 		const realWord: RealWord = {
@@ -503,6 +589,10 @@ export class LyricLineEl extends LyricLineBase {
 			height: 0,
 			padding: 0,
 			shouldEmphasize: shouldEmphasize,
+			// 保存 rubyWord 和 wordBody 元素引用
+			rubyWordEl: rubyWordEl,
+			wordBodyEl: hasRubyLine ? (wordContainer as HTMLDivElement) : undefined,
+			isRubyPhraseStart: word.rubyPhraseStart,
 		};
 
 		return realWord;
@@ -557,14 +647,45 @@ export class LyricLineEl extends LyricLineBase {
 				continue;
 			}
 
-			const realWord = this.createWord(word, emp, hasRubyLine, hasRomanLine);
+			// 检查是否需要合并到前一个 wordWithRuby
+			const hasRuby = (word.ruby?.length ?? 0) > 0;
+			const shouldMerge = hasRuby && !word.rubyPhraseStart && this.lastWordWithRuby !== null;
 
-			if (emp) {
-				characterElements.push(...realWord.subElements);
+			if (shouldMerge) {
+				// 合并到前一个 wordWithRuby
+				this.mergeWordToLastWordWithRuby(word, emp, hasRomanLine);
+				// 将被合并的单词信息保存到最后一个 RealWord 中
+				if (this.splittedWords.length > 0) {
+					const lastRealWord = this.splittedWords[this.splittedWords.length - 1];
+					if (!lastRealWord.mergedWords) {
+						lastRealWord.mergedWords = [];
+					}
+					lastRealWord.mergedWords.push(word);
+				}
+			} else {
+				// 创建新的 word
+				const realWord = this.createWord(word, emp, hasRubyLine, hasRomanLine);
+
+				if (emp) {
+					characterElements.push(...realWord.subElements);
+				}
+
+				this.splittedWords.push(realWord);
+				wrapperWordEl.appendChild(realWord.mainElement);
+
+				// 如果是有 ruby 的单词，更新 lastWordWithRuby
+				if (hasRuby) {
+					const rubyWordEl = realWord.mainElement.querySelector(`.${styles.rubyWord}`) as HTMLDivElement;
+					const wordBodyEl = realWord.mainElement.querySelector(`.${styles.wordBody}`) as HTMLDivElement;
+					if (rubyWordEl && wordBodyEl) {
+						this.lastWordWithRuby = {
+							mainElement: realWord.mainElement,
+							rubyWordEl,
+							wordBodyEl,
+						};
+					}
+				}
 			}
-
-			this.splittedWords.push(realWord);
-			wrapperWordEl.appendChild(realWord.mainElement);
 		}
 
 		if (emp && this.splittedWords.length > 0) {
@@ -804,189 +925,364 @@ export class LyricLineEl extends LyricLineBase {
 				this.splittedWords.reduce((pv, w) => Math.max(w.endTime, pv), 0),
 				this.lyricLine.endTime,
 			) - this.lyricLine.startTime;
-		this.splittedWords.forEach((word, i) => {
+
+		// 收集所有需要动画的单词（包括合并的 ruby 单词）
+		const animatedWords: RealWord[] = [];
+		for (const word of this.splittedWords) {
+			// 只处理有 ruby 且是短语起始的单词，或者没有 ruby 的单词
+			const hasRuby = (word.ruby?.length ?? 0) > 0;
+			if (!hasRuby || word.isRubyPhraseStart) {
+				animatedWords.push(word);
+			}
+		}
+
+		animatedWords.forEach((word, i) => {
 			const wordEl = word.mainElement;
-			if (wordEl) {
-				const fadeWidth = word.height * this.lyricPlayer.getWordFadeWidth();
-				const [maskImage, totalAspect] = generateFadeGradient(
-					fadeWidth / (word.width + word.padding * 2),
-				);
-				const totalAspectStr = `${totalAspect * 100}% 100%`;
-				if (this.lyricPlayer.supportMaskImage) {
-					wordEl.style.maskImage = maskImage;
-					wordEl.style.maskRepeat = "no-repeat";
-					wordEl.style.maskOrigin = "left";
-					wordEl.style.maskSize = totalAspectStr;
-				} else {
-					wordEl.style.webkitMaskImage = maskImage;
-					wordEl.style.webkitMaskRepeat = "no-repeat";
-					wordEl.style.webkitMaskOrigin = "left";
-					wordEl.style.webkitMaskSize = totalAspectStr;
-				}
-				// 为了尽可能将渐变动画在相连的每个单词间近似衔接起来
-				// 要综合每个单词的效果时间和间隙生成动画帧数组
-				const widthBeforeSelf =
-					this.splittedWords.slice(0, i).reduce((a, b) => a + b.width, 0) +
-					(this.splittedWords[0] ? fadeWidth : 0);
-				const minOffset = -(word.width + word.padding * 2 + fadeWidth);
-				const clampOffset = (x: number) => Math.max(minOffset, Math.min(0, x));
-				let curPos = -widthBeforeSelf - word.width - word.padding - fadeWidth;
-				let timeOffset = 0;
-				const frames: Keyframe[] = [];
-				let lastPos = curPos;
-				let lastTime = 0;
-				const pushFrame = () => {
-					// 此处如果添加过渡函数，会导致单词时序不准确，所以不添加
-					// const easing = "cubic-bezier(.33,.12,.83,.9)";
-					const moveOffset = curPos - lastPos;
-					const time = Math.max(0, Math.min(1, timeOffset));
-					const duration = time - lastTime;
-					const d = Math.abs(duration / moveOffset);
-					// 因为有可能会和之前的动画有边界
-					if (curPos > minOffset && lastPos < minOffset) {
-						const staticTime = Math.abs(lastPos - minOffset) * d;
-						const value = `${clampOffset(lastPos)}px 0`;
-						const frame: Keyframe = {
-							offset: lastTime + staticTime,
-							maskPosition: value,
-						};
-						frames.push(frame);
-					}
-					if (curPos > 0 && lastPos < 0) {
-						const staticTime = Math.abs(lastPos) * d;
-						const value = `${clampOffset(curPos)}px 0`;
-						const frame: Keyframe = {
-							offset: lastTime + staticTime,
-							maskPosition: value,
-						};
-						frames.push(frame);
-					}
-					const value = `${clampOffset(curPos)}px 0`;
-					const frame: Keyframe = {
-						offset: time,
-						maskPosition: value,
-					};
-					frames.push(frame);
-					lastPos = curPos;
-					lastTime = time;
-				};
-				pushFrame();
-				let lastTimeStamp = 0;
-				this.splittedWords.forEach((otherWord, j) => {
-					// 停顿
-					{
-						const curTimeStamp = otherWord.startTime - this.lyricLine.startTime;
-						const staticDuration = curTimeStamp - lastTimeStamp;
-						timeOffset += staticDuration / totalFadeDuration;
-						if (staticDuration > 0) pushFrame();
-						lastTimeStamp = curTimeStamp;
-					}
-					// 移动
-					{
-						const fadeDuration = Math.max(
-							0,
-							otherWord.endTime - otherWord.startTime,
-						);
-						const rubySegments = this.getRubySegments(otherWord);
-						const rubyCharCount = rubySegments.reduce(
-							(total, ruby) => total + ruby.word.length,
-							0,
-						);
-						if (rubyCharCount > 0) {
-							const widthPerChar = otherWord.width / rubyCharCount;
-							let charIndex = 0;
-							for (const ruby of rubySegments) {
-								const rubyStartTime = Number.isFinite(ruby.startTime)
-									? ruby.startTime
-									: otherWord.startTime;
-								const rubyEndTime = Number.isFinite(ruby.endTime)
-									? ruby.endTime
-									: otherWord.endTime;
-								const rubyStart = Math.max(rubyStartTime, otherWord.startTime);
-								const rubyEnd = Math.min(
-									Math.max(rubyEndTime, rubyStart),
-									otherWord.endTime,
-								);
-								const rubyStartStamp = rubyStart - this.lyricLine.startTime;
-								const rubyStaticDuration = rubyStartStamp - lastTimeStamp;
-								timeOffset += rubyStaticDuration / totalFadeDuration;
-								if (rubyStaticDuration > 0) pushFrame();
-								lastTimeStamp = rubyStartStamp;
-								const rubyDuration = Math.max(0, rubyEnd - rubyStart);
-								const perCharDuration = rubyDuration / ruby.word.length;
-								for (
-									let rubyCharIndex = 0;
-									rubyCharIndex < ruby.word.length;
-									rubyCharIndex++
-								) {
-									timeOffset += perCharDuration / totalFadeDuration;
-									curPos += widthPerChar;
-									if (j === 0 && charIndex === 0) {
-										curPos += fadeWidth * 1.5;
-									}
-									if (
-										j === this.splittedWords.length - 1 &&
-										charIndex === rubyCharCount - 1
-									) {
-										curPos += fadeWidth * 0.5;
-									}
-									if (perCharDuration > 0) pushFrame();
-									lastTimeStamp += perCharDuration;
-									charIndex++;
-								}
-							}
-							const wordEndStamp = Math.max(
-								otherWord.endTime - this.lyricLine.startTime,
-								lastTimeStamp,
-							);
-							const wordTailDuration = wordEndStamp - lastTimeStamp;
-							timeOffset += wordTailDuration / totalFadeDuration;
-							if (wordTailDuration > 0) pushFrame();
-							lastTimeStamp = wordEndStamp;
-						} else {
-							const segmentCount = 1;
-							const segmentWidth = otherWord.width / segmentCount;
-							const segmentDuration = fadeDuration / segmentCount;
-							for (
-								let segmentIndex = 0;
-								segmentIndex < segmentCount;
-								segmentIndex++
-							) {
-								timeOffset += segmentDuration / totalFadeDuration;
-								curPos += segmentWidth;
-								if (j === 0 && segmentIndex === 0) {
-									curPos += fadeWidth * 1.5;
-								}
-								if (
-									j === this.splittedWords.length - 1 &&
-									segmentIndex === segmentCount - 1
-								) {
-									curPos += fadeWidth * 0.5;
-								}
-								if (segmentDuration > 0) pushFrame();
-								lastTimeStamp += segmentDuration;
-							}
-						}
-					}
-				});
-				for (const a of word.maskAnimations) {
-					a.cancel();
-				}
-				try {
-					// TODO: 如果此处动画帧计算出错，需要一个后备方案
-					// 此处如果添加过渡函数，会导致单词时序不准确，所以不添加
-					const ani = wordEl.animate(frames, {
-						duration: totalFadeDuration || 1,
-						id: `fade-word-${word.word}-${i}`,
-						fill: "both",
-					});
-					ani.pause();
-					word.maskAnimations = [ani];
-				} catch (err) {
-					console.warn("应用渐变动画发生错误", frames, totalFadeDuration, err);
-				}
+			if (!wordEl) return;
+
+			const hasRuby = (word.ruby?.length ?? 0) > 0;
+			const fadeWidth = word.height * this.lyricPlayer.getWordFadeWidth();
+
+			// 取消之前的动画
+			for (const a of word.maskAnimations) {
+				a.cancel();
+			}
+			word.maskAnimations = [];
+
+			if (hasRuby && word.rubyWordEl && word.wordBodyEl) {
+				// 有 ruby 的情况：分别为 rubyWord 和 wordBody 创建动画
+				this.createRubyWordAnimation(word, word.rubyWordEl, totalFadeDuration, fadeWidth, i);
+				this.createWordBodyAnimation(word, word.wordBodyEl, totalFadeDuration, fadeWidth, i);
+			} else {
+				// 没有 ruby 的情况：为整个 word 创建动画
+				this.createWordAnimation(word, wordEl, totalFadeDuration, fadeWidth, i);
 			}
 		});
+	}
+
+	/**
+	 * 为 rubyWord 下的每个 span 创建动画
+	 * 每个 span 负责单个 ruby 字符的动画
+	 */
+	private createRubyWordAnimation(
+		word: RealWord,
+		rubyWordEl: HTMLDivElement,
+		totalFadeDuration: number,
+		fadeWidth: number,
+		index: number,
+	) {
+		// 获取所有 ruby span 元素
+		const rubySpans = Array.from(rubyWordEl.children) as HTMLSpanElement[];
+		if (rubySpans.length === 0) return;
+
+		// 收集所有 ruby 字符的时间信息（包括当前单词和被合并的单词）
+		// 使用数组保存 [rubySegment, parentWord] 对
+		const allRubyData: { ruby: LyricWordBase; parentWord: LyricWord }[] = [];
+
+		// 首先添加当前单词的 ruby
+		const currentRubySegments = this.getRubySegments(word);
+		for (const ruby of currentRubySegments) {
+			allRubyData.push({ ruby, parentWord: word });
+		}
+
+		// 添加被合并单词的 ruby
+		if (word.mergedWords) {
+			for (const mergedWord of word.mergedWords) {
+				const mergedRubySegments = this.getRubySegments(mergedWord);
+				for (const ruby of mergedRubySegments) {
+					allRubyData.push({ ruby, parentWord: mergedWord });
+				}
+			}
+		}
+
+		if (allRubyData.length === 0) return;
+
+		// 收集所有 ruby 字符的时间信息
+		const rubyChars: { startTime: number; endTime: number; element: HTMLSpanElement }[] = [];
+		let spanIndex = 0;
+
+		for (const { ruby, parentWord } of allRubyData) {
+			// 使用 parentWord 的时间作为默认值，而不是 word（短语起始单词）的时间
+			const rubyStartTime = Number.isFinite(ruby.startTime) ? ruby.startTime : parentWord.startTime;
+			const rubyEndTime = Number.isFinite(ruby.endTime) ? ruby.endTime : parentWord.endTime;
+			const rubyStart = Math.max(rubyStartTime, parentWord.startTime);
+			const rubyEnd = Math.min(Math.max(rubyEndTime, rubyStart), parentWord.endTime);
+			const rubyDuration = Math.max(0, rubyEnd - rubyStart);
+			const perCharDuration = rubyDuration / ruby.word.length;
+
+			for (let i = 0; i < ruby.word.length; i++) {
+				if (spanIndex < rubySpans.length) {
+					rubyChars.push({
+						startTime: rubyStart + perCharDuration * i,
+						endTime: rubyStart + perCharDuration * (i + 1),
+						element: rubySpans[spanIndex],
+					});
+					spanIndex++;
+				}
+			}
+		}
+
+		// 为每个 ruby 字符的 span 创建动画
+		for (let i = 0; i < rubyChars.length; i++) {
+			const char = rubyChars[i];
+			const charWidth = char.element.clientWidth || 0;
+
+			const [maskImage, totalAspect] = generateFadeGradient(
+				fadeWidth / Math.max(1, charWidth),
+			);
+			const totalAspectStr = `${totalAspect * 100}% 100%`;
+
+			// 设置遮罩样式
+			if (this.lyricPlayer.supportMaskImage) {
+				char.element.style.maskImage = maskImage;
+				char.element.style.maskRepeat = "no-repeat";
+				char.element.style.maskOrigin = "left";
+				char.element.style.maskSize = totalAspectStr;
+			} else {
+				char.element.style.webkitMaskImage = maskImage;
+				char.element.style.webkitMaskRepeat = "no-repeat";
+				char.element.style.webkitMaskOrigin = "left";
+				char.element.style.webkitMaskSize = totalAspectStr;
+			}
+
+			const minOffset = -(charWidth + fadeWidth);
+			const clampOffset = (x: number) => Math.max(minOffset, Math.min(0, x));
+
+			// 生成动画帧
+			const frames: Keyframe[] = [];
+			const charStartStamp = char.startTime - this.lyricLine.startTime;
+			const charEndStamp = char.endTime - this.lyricLine.startTime;
+
+			// 初始状态（遮罩在左侧外）
+			frames.push({
+				offset: 0,
+				maskPosition: `${clampOffset(-charWidth - fadeWidth)}px 0`,
+			});
+
+			// 开始时间前保持隐藏
+			const startOffset = Math.max(0, charStartStamp / totalFadeDuration);
+			if (startOffset > 0) {
+				frames.push({
+					offset: startOffset,
+					maskPosition: `${clampOffset(-charWidth - fadeWidth)}px 0`,
+				});
+			}
+
+			// 动画过程：从左侧外移动到完全显示
+			const endOffset = Math.min(1, charEndStamp / totalFadeDuration);
+			frames.push({
+				offset: endOffset,
+				maskPosition: `${clampOffset(fadeWidth * 0.5)}px 0`,
+			});
+
+			// 保持显示状态到结束
+			if (endOffset < 1) {
+				frames.push({
+					offset: 1,
+					maskPosition: `${clampOffset(fadeWidth * 0.5)}px 0`,
+				});
+			}
+
+			try {
+				const ani = char.element.animate(frames, {
+					duration: totalFadeDuration || 1,
+					id: `fade-ruby-char-${char.element.innerText}-${index}-${i}`,
+					fill: "both",
+				});
+				ani.pause();
+				word.maskAnimations.push(ani);
+			} catch (err) {
+				console.warn("应用 ruby 字符渐变动画发生错误", frames, totalFadeDuration, err);
+			}
+		}
+	}
+
+	/**
+	 * 为 wordBody 下的每个 span 创建动画
+	 * 每个 span 负责单个 base 字符（或单词）的动画
+	 */
+	private createWordBodyAnimation(
+		word: RealWord,
+		wordBodyEl: HTMLDivElement,
+		totalFadeDuration: number,
+		fadeWidth: number,
+		index: number,
+	) {
+		// 获取所有 wordBody 下的 span 元素
+		const wordSpans = Array.from(wordBodyEl.children) as HTMLSpanElement[];
+		if (wordSpans.length === 0) return;
+
+		// 收集所有 base 单词的时间信息
+		const baseWords: { word: string; startTime: number; endTime: number; element: HTMLSpanElement }[] = [];
+
+		// 首先添加当前单词
+		if (wordSpans.length > 0) {
+			baseWords.push({
+				word: word.word,
+				startTime: word.startTime,
+				endTime: word.endTime,
+				element: wordSpans[0],
+			});
+		}
+
+		// 添加被合并的单词（从 mergedWords 中获取）
+		if (word.mergedWords && word.mergedWords.length > 0) {
+			for (let i = 0; i < word.mergedWords.length && i + 1 < wordSpans.length; i++) {
+				const mergedWord = word.mergedWords[i];
+				baseWords.push({
+					word: mergedWord.word,
+					startTime: mergedWord.startTime,
+					endTime: mergedWord.endTime,
+					element: wordSpans[i + 1],
+				});
+			}
+		}
+
+		// 为每个 base 单词的 span 创建动画
+		for (let i = 0; i < baseWords.length; i++) {
+			const baseWord = baseWords[i];
+			const wordWidth = baseWord.element.clientWidth || 0;
+
+			const [maskImage, totalAspect] = generateFadeGradient(
+				fadeWidth / Math.max(1, wordWidth),
+			);
+			const totalAspectStr = `${totalAspect * 100}% 100%`;
+
+			// 设置遮罩样式
+			if (this.lyricPlayer.supportMaskImage) {
+				baseWord.element.style.maskImage = maskImage;
+				baseWord.element.style.maskRepeat = "no-repeat";
+				baseWord.element.style.maskOrigin = "left";
+				baseWord.element.style.maskSize = totalAspectStr;
+			} else {
+				baseWord.element.style.webkitMaskImage = maskImage;
+				baseWord.element.style.webkitMaskRepeat = "no-repeat";
+				baseWord.element.style.webkitMaskOrigin = "left";
+				baseWord.element.style.webkitMaskSize = totalAspectStr;
+			}
+
+			const minOffset = -(wordWidth + fadeWidth);
+			const clampOffset = (x: number) => Math.max(minOffset, Math.min(0, x));
+
+			// 生成动画帧
+			const frames: Keyframe[] = [];
+			const wordStartStamp = baseWord.startTime - this.lyricLine.startTime;
+			const wordEndStamp = baseWord.endTime - this.lyricLine.startTime;
+
+			// 初始状态（遮罩在左侧外）
+			frames.push({
+				offset: 0,
+				maskPosition: `${clampOffset(-wordWidth - fadeWidth)}px 0`,
+			});
+
+			// 开始时间前保持隐藏
+			const startOffset = Math.max(0, wordStartStamp / totalFadeDuration);
+			if (startOffset > 0) {
+				frames.push({
+					offset: startOffset,
+					maskPosition: `${clampOffset(-wordWidth - fadeWidth)}px 0`,
+				});
+			}
+
+			// 动画过程：从左侧外移动到完全显示
+			const endOffset = Math.min(1, wordEndStamp / totalFadeDuration);
+			frames.push({
+				offset: endOffset,
+				maskPosition: `${clampOffset(fadeWidth * 0.5)}px 0`,
+			});
+
+			// 保持显示状态到结束
+			if (endOffset < 1) {
+				frames.push({
+					offset: 1,
+					maskPosition: `${clampOffset(fadeWidth * 0.5)}px 0`,
+				});
+			}
+
+			try {
+				const ani = baseWord.element.animate(frames, {
+					duration: totalFadeDuration || 1,
+					id: `fade-base-word-${baseWord.word}-${index}-${i}`,
+					fill: "both",
+				});
+				ani.pause();
+				word.maskAnimations.push(ani);
+			} catch (err) {
+				console.warn("应用 base 单词渐变动画发生错误", frames, totalFadeDuration, err);
+			}
+		}
+	}
+
+	/**
+	 * 为普通单词创建动画
+	 */
+	private createWordAnimation(
+		word: RealWord,
+		wordEl: HTMLSpanElement,
+		totalFadeDuration: number,
+		fadeWidth: number,
+		index: number,
+	) {
+		const [maskImage, totalAspect] = generateFadeGradient(
+			fadeWidth / (word.width + word.padding * 2),
+		);
+		const totalAspectStr = `${totalAspect * 100}% 100%`;
+
+		if (this.lyricPlayer.supportMaskImage) {
+			wordEl.style.maskImage = maskImage;
+			wordEl.style.maskRepeat = "no-repeat";
+			wordEl.style.maskOrigin = "left";
+			wordEl.style.maskSize = totalAspectStr;
+		} else {
+			wordEl.style.webkitMaskImage = maskImage;
+			wordEl.style.webkitMaskRepeat = "no-repeat";
+			wordEl.style.webkitMaskOrigin = "left";
+			wordEl.style.webkitMaskSize = totalAspectStr;
+		}
+
+		const minOffset = -(word.width + word.padding * 2 + fadeWidth);
+		const clampOffset = (x: number) => Math.max(minOffset, Math.min(0, x));
+
+		let curPos = -word.width - word.padding - fadeWidth;
+		let timeOffset = 0;
+		const frames: Keyframe[] = [];
+		let lastPos = curPos;
+		let lastTime = 0;
+
+		const pushFrame = () => {
+			const time = Math.max(0, Math.min(1, timeOffset));
+			const value = `${clampOffset(curPos)}px 0`;
+			frames.push({ offset: time, maskPosition: value });
+			lastPos = curPos;
+			lastTime = time;
+		};
+
+		pushFrame();
+
+		// 停顿
+		const wordStartStamp = word.startTime - this.lyricLine.startTime;
+		timeOffset += wordStartStamp / totalFadeDuration;
+		pushFrame();
+
+		// 移动
+		const wordDuration = word.endTime - word.startTime;
+		timeOffset += wordDuration / totalFadeDuration;
+		curPos += word.width;
+		curPos += fadeWidth * 1.5;
+		curPos += fadeWidth * 0.5;
+		pushFrame();
+
+		try {
+			const ani = wordEl.animate(frames, {
+				duration: totalFadeDuration || 1,
+				id: `fade-word-${word.word}-${index}`,
+				fill: "both",
+			});
+			ani.pause();
+			word.maskAnimations.push(ani);
+		} catch (err) {
+			console.warn("应用单词渐变动画发生错误", frames, totalFadeDuration, err);
+		}
 	}
 	getElement() {
 		return this.element;

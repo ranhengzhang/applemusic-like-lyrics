@@ -126,6 +126,16 @@
 		display: flex;
 		justify-content: center;
 		min-height: 1em;
+
+		&:not(:empty) + .wordBody {
+			flex-direction: row;
+
+			span {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+			}
+		}
 	}
 
 	.wordWithRuby {
