@@ -5,14 +5,12 @@ import {
 	type LyricLine,
 	LyricLineRenderMode,
 	type LyricWord,
+	type OptimizeLyricOptions,
 } from "../interfaces.ts";
 import styles from "../styles/lyric-player.module.css";
 import { eqSet } from "../utils/eq-set.ts";
 import { isCJK } from "../utils/is-cjk.ts";
-import {
-	type OptimizeLyricOptions,
-	optimizeLyricLines,
-} from "../utils/optimize-lyric.ts";
+import { optimizeLyricLines } from "../utils/optimize-lyric.ts";
 import { Spring, type SpringParams } from "../utils/spring.ts";
 import { BottomLineEl } from "./bottom-line.ts";
 import { InterludeDots } from "./dom/interlude-dots.ts";
