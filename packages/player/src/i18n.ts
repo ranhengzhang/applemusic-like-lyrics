@@ -6,8 +6,6 @@ import { initReactI18next } from "react-i18next";
 
 type ResourcesType = typeof resources;
 
-const supportedLanguages = Object.keys(resources) as (keyof ResourcesType)[];
-
 declare module "i18next" {
 	// Extend CustomTypeOptions
 	interface CustomTypeOptions {
@@ -24,8 +22,6 @@ i18n
 		resources,
 		debug: import.meta.env.DEV,
 		fallbackLng: "en-US",
-		supportedLngs: supportedLanguages,
-		nonExplicitSupportedLngs: true,
 		defaultNS: "translation",
 		interpolation: {
 			escapeValue: false,

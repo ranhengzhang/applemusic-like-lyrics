@@ -318,9 +318,6 @@ const GeneralSettings = () => {
 			return result;
 		}
 
-		const originalLocaleKeyNum = collectLocaleKey(
-			i18n.options.resources?.["zh-CN"] ?? {},
-		).size;
 		const menu = Object.keys(i18n.options.resources ?? {})
 			.map((langId) => {
 				return {
@@ -329,7 +326,7 @@ const GeneralSettings = () => {
 				};
 			})
 			.filter(({ keyNum }) => keyNum)
-			.map(({ langId, keyNum }) => {
+			.map(({ langId }) => {
 				const name =
 					new Intl.DisplayNames(i18n.language, {
 						type: "language",
@@ -339,9 +336,7 @@ const GeneralSettings = () => {
 						type: "language",
 					}).of(langId) || langId;
 				return {
-					label: `${origName === name ? origName : `${origName} (${name})`} (${(
-						(keyNum / originalLocaleKeyNum) * 100
-					).toFixed(1)}%)`,
+					label: origName === name ? origName : `${origName} (${name})`,
 					value: langId,
 				};
 			});
