@@ -80,6 +80,7 @@
 .lyricMainLine {
 	transition: opacity 0.3s 0.1s;
 	contain: content paint;
+	font-family: var(--amll-lp-original-font, inherit);
 
 	span {
 		display: inline-block;
@@ -90,6 +91,7 @@
 		font-size: 0.5em;
 		line-height: 1em;
 		display: flex;
+		font-family: var(--amll-lp-roman-font, inherit);
 	}
 
 	.rubyWord {
@@ -98,6 +100,7 @@
 		display: flex;
 		justify-content: center;
 		min-height: 1em;
+		font-family: var(--amll-lp-annotation-font, inherit);
 	}
 
 	.wordWithRuby {
@@ -118,6 +121,22 @@
 	line-height: 1.5em;
 	transition: opacity 0.2s 0.25s;
 	opacity: 0.3;
+}
+
+.lyricTransLine {
+	font-size: max(0.5em, 10px);
+	line-height: 1.5em;
+	transition: opacity 0.2s 0.25s;
+	opacity: 0.3;
+	font-family: var(--amll-lp-translation-font, inherit);
+}
+
+.lyricRomanLine {
+	font-size: max(0.5em, 10px);
+	line-height: 1.5em;
+	transition: opacity 0.2s 0.25s;
+	opacity: 0.3;
+	font-family: var(--amll-lp-roman-font, inherit);
 }
 
 .interludeDots {
@@ -152,7 +171,9 @@
 }
 
 @supports (mix-blend-mode: plus-lighter) {
-	.lyricSubLine {
+	.lyricSubLine,
+	.lyricTransLine,
+	.lyricRomanLine {
 		opacity: 0.3;
 	}
 }

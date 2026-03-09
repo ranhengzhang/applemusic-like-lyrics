@@ -72,6 +72,8 @@
 }
 
 :global(.amll-lyric-player) {
+	font-weight: 450;
+
 	&:hover .lyricLine {
 		filter: unset !important;
 	}
@@ -100,6 +102,7 @@
 	transition: opacity 0.3s 0.1s;
 	margin: -1em;
 	padding: 1em;
+	font-family: var(--amll-lp-original-font, inherit);
 
 	text-wrap: balance;
 
@@ -118,6 +121,7 @@
 		line-height: 1em;
 		display: flex;
 		padding-inline-end: 0.3em;
+		font-family: var(--amll-lp-roman-font, inherit);
 	}
 
 	.rubyWord {
@@ -126,6 +130,7 @@
 		display: flex;
 		justify-content: center;
 		min-height: 1em;
+		font-family: var(--amll-lp-annotation-font, inherit);
 
 		&:not(:empty) + .wordBody {
 			flex-direction: row;
@@ -181,6 +186,22 @@
 	line-height: 1.5em;
 	transition: opacity 0.2s 0.25s;
 	opacity: 0.3;
+}
+
+.lyricTransLine {
+	font-size: max(0.5em, 10px);
+	line-height: 1.5em;
+	transition: opacity 0.2s 0.25s;
+	opacity: 0.3;
+	font-family: var(--amll-lp-translation-font, inherit);
+}
+
+.lyricRomanLine {
+	font-size: max(0.5em, 10px);
+	line-height: 1.5em;
+	transition: opacity 0.2s 0.25s;
+	opacity: 0.3;
+	font-family: var(--amll-lp-roman-font, inherit);
 }
 
 .disableSpring > * {
