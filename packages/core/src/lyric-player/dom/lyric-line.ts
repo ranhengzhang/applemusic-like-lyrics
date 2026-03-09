@@ -139,8 +139,8 @@ export class LyricLineEl extends LyricLineBase {
 		const trans = this.element.children[1] as HTMLDivElement;
 		const roman = this.element.children[2] as HTMLDivElement;
 		main.setAttribute("class", styles.lyricMainLine);
-		trans.setAttribute("class", styles.lyricSubLine);
-		roman.setAttribute("class", styles.lyricSubLine);
+		trans.setAttribute("class", `${styles.lyricSubLine} ${styles.lyricTransLine}`);
+		roman.setAttribute("class", `${styles.lyricSubLine} ${styles.lyricRomanLine}`);
 		// 延迟构建具体行内容，进入可视区（含 overscan）时再构建
 		this.rebuildStyle();
 	}
