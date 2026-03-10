@@ -18,3 +18,7 @@ target/
 .vscode/
 *.tsbuildinfo
 .million/
+.gitnexus
+AGENTS.md
+CLAUDE.md
+.claude/
