@@ -3,7 +3,6 @@ import {
 	type LyricLine,
 	LyricLineRenderMode,
 	type LyricWord,
-	type LyricWordBase,
 } from "../../interfaces.ts";
 import styles from "../../styles/lyric-player.module.css";
 import { isCJK } from "../../utils/is-cjk.ts";
@@ -25,12 +24,6 @@ interface RealWord extends LyricWord {
 	height: number;
 	padding: number;
 	shouldEmphasize: boolean;
-	/** rubyWord 元素，用于动画 */
-	rubyWordEl?: HTMLDivElement;
-	/** wordBody 元素，用于动画 */
-	wordBodyEl?: HTMLDivElement;
-	/** 被合并到该单词的其他单词（用于 ruby 短语） */
-	mergedWords?: LyricWord[];
 }
 
 const ANIMATION_FRAME_QUANTITY = 32;
@@ -101,13 +94,6 @@ export class LyricLineEl extends LyricLineBase {
 
 	private targetBrightAlpha = 1.0;
 	private targetDarkAlpha = 0.2;
-
-	// 跟踪最后一个创建的带有 ruby 的 wordWithRuby 元素，用于合并没有 rubyPhraseStart 的单词
-	private lastWordWithRuby: {
-		mainElement: HTMLSpanElement;
-		rubyWordEl: HTMLDivElement;
-		wordBodyEl: HTMLDivElement;
-	} | null = null;
 
 	constructor(
 		private lyricPlayer: DomLyricPlayer,
@@ -407,8 +393,6 @@ export class LyricLineEl extends LyricLineBase {
 
 	override rebuildElement() {
 		this.disposeElements();
-		// 重置 lastWordWithRuby，确保每行歌词开始时都是干净的状态
-		this.lastWordWithRuby = null;
 		const main = this.element.children[0] as HTMLDivElement;
 		const trans = this.element.children[1] as HTMLDivElement;
 		const roman = this.element.children[2] as HTMLDivElement;
@@ -428,8 +412,51 @@ export class LyricLineEl extends LyricLineBase {
 		);
 		main.innerHTML = "";
 
+		// 首先将 chunkedWords 完全扁平化为单个单词数组
+		const flatWords: LyricWord[] = [];
 		for (const chunk of chunkedWords) {
-			this.buildWord(chunk, main, hasRubyLine, hasRomanLine);
+			if (Array.isArray(chunk)) {
+				flatWords.push(...chunk);
+			} else {
+				flatWords.push(chunk);
+			}
+		}
+
+		// 处理 Ruby 短语合并
+		const resultWords: (LyricWord | LyricWord[])[] = [];
+		let i = 0;
+		while (i < flatWords.length) {
+			const word = flatWords[i];
+			const hasRuby = (word.ruby?.length ?? 0) > 0;
+
+			// 如果是 ruby 短语起始，收集整个短语
+			if (hasRuby && word.rubyPhraseStart) {
+				const rubyPhrase: LyricWord[] = [word];
+				i++;
+
+				// 向后搜寻需要合并的 ruby 单词（必须连续有 ruby 且不是新的短语起始）
+				while (i < flatWords.length) {
+					const nextWord = flatWords[i];
+					const nextHasRuby = (nextWord.ruby?.length ?? 0) > 0;
+
+					// 只有当下一个单词有 ruby 且不是短语起始时才合并
+					if (nextHasRuby && !nextWord.rubyPhraseStart) {
+						rubyPhrase.push(nextWord);
+						i++;
+					} else {
+						break;
+					}
+				}
+
+				resultWords.push(rubyPhrase);
+			} else {
+				resultWords.push(word);
+				i++;
+			}
+		}
+
+		for (const item of resultWords) {
+			this.buildWord(item, main, hasRubyLine, hasRomanLine);
 		}
 
 		this.setSubLinesText(trans, roman);
@@ -454,66 +481,7 @@ export class LyricLineEl extends LyricLineBase {
 		);
 	}
 
-	/**
-	 * 将单词合并到前一个 wordWithRuby 中
-	 * 用于处理没有 rubyPhraseStart 标记的 ruby 单词
-	 */
-	private mergeWordToLastWordWithRuby(
-		word: LyricWord,
-		shouldEmphasize: boolean,
-		hasRomanLine: boolean,
-	) {
-		if (!this.lastWordWithRuby) return;
 
-		const { rubyWordEl, wordBodyEl } = this.lastWordWithRuby;
-		const romanWord = word.romanWord?.trim() ?? "";
-
-		// 合并 ruby 部分
-		const rubySegments = this.getRubySegments(word);
-		for (const ruby of rubySegments) {
-			const rubyPartEl = document.createElement("span");
-			rubyPartEl.innerText = ruby.word;
-			rubyPartEl.dataset.startTime = String(ruby.startTime);
-			rubyPartEl.dataset.endTime = String(ruby.endTime);
-			rubyWordEl.appendChild(rubyPartEl);
-		}
-
-		// 创建 wordBody 的子元素
-		const wordContentEl = document.createElement("span");
-
-		if (shouldEmphasize) {
-			wordContentEl.classList.add(styles.emphasize);
-			for (const char of word.word.trim()) {
-				const charEl = document.createElement("span");
-				charEl.innerText = char;
-				wordContentEl.appendChild(charEl);
-			}
-		} else {
-			if (hasRomanLine) {
-				const wordEl = document.createElement("div");
-				wordEl.innerText = word.word.trim();
-				wordContentEl.appendChild(wordEl);
-			} else {
-				// 总是创建一个 div 来包裹单词文本，保持 DOM 结构一致
-				const wordEl = document.createElement("div");
-				wordEl.innerText = word.word.trim();
-				wordContentEl.appendChild(wordEl);
-			}
-		}
-
-		// 添加 romanWord
-		if (hasRomanLine) {
-			const romanWordEl = document.createElement("div");
-			romanWordEl.classList.add(styles.romanWord);
-			// 在 romanWord 内部添加一层 span 包裹音译内容
-			const romanWordSpan = document.createElement("span");
-			romanWordSpan.innerText = romanWord.length > 0 ? romanWord : "\u00A0";
-			romanWordEl.appendChild(romanWordSpan);
-			wordContentEl.appendChild(romanWordEl);
-		}
-
-		wordBodyEl.appendChild(wordContentEl);
-	}
 
 	private createWord(
 		word: LyricWord,
@@ -590,9 +558,6 @@ export class LyricLineEl extends LyricLineBase {
 			height: 0,
 			padding: 0,
 			shouldEmphasize: shouldEmphasize,
-			// 保存 rubyWord 和 wordBody 元素引用
-			rubyWordEl: rubyWordEl,
-			wordBodyEl: hasRubyLine ? (wordContainer as HTMLDivElement) : undefined,
 		};
 
 		return realWord;
@@ -641,28 +606,27 @@ export class LyricLineEl extends LyricLineBase {
 
 		const characterElements: HTMLElement[] = [];
 
-		for (const word of chunk) {
-			if (!word.word.trim()) {
-				wrapperWordEl.appendChild(document.createTextNode(word.word));
-				continue;
+		// 检查是否是 ruby 短语（多个单词共享 ruby）
+		const isRubyPhrase = chunk.length > 1 && chunk.some(w => (w.ruby?.length ?? 0) > 0);
+
+		if (isRubyPhrase) {
+			// 创建合并的 ruby 短语 DOM
+			const realWord = this.createRubyPhraseWord(chunk, emp, hasRubyLine, hasRomanLine);
+
+			if (emp) {
+				characterElements.push(...realWord.subElements);
 			}
 
-			// 检查是否需要合并到前一个 wordWithRuby
-			const hasRuby = (word.ruby?.length ?? 0) > 0;
-			const shouldMerge = hasRuby && !word.rubyPhraseStart && this.lastWordWithRuby !== null;
-
-			if (shouldMerge) {
-				// 合并到前一个 wordWithRuby
-				this.mergeWordToLastWordWithRuby(word, emp, hasRomanLine);
-				// 将被合并的单词信息保存到最后一个 RealWord 中
-				if (this.splittedWords.length > 0) {
-					const lastRealWord = this.splittedWords[this.splittedWords.length - 1];
-					if (!lastRealWord.mergedWords) {
-						lastRealWord.mergedWords = [];
-					}
-					lastRealWord.mergedWords.push(word);
+			this.splittedWords.push(realWord);
+			wrapperWordEl.appendChild(realWord.mainElement);
+		} else {
+			// 普通单词处理
+			for (const word of chunk) {
+				if (!word.word.trim()) {
+					wrapperWordEl.appendChild(document.createTextNode(word.word));
+					continue;
 				}
-			} else {
+
 				// 创建新的 word
 				const realWord = this.createWord(word, emp, hasRubyLine, hasRomanLine);
 
@@ -672,19 +636,6 @@ export class LyricLineEl extends LyricLineBase {
 
 				this.splittedWords.push(realWord);
 				wrapperWordEl.appendChild(realWord.mainElement);
-
-				// 如果是有 ruby 的单词，更新 lastWordWithRuby
-				if (hasRuby) {
-					const rubyWordEl = realWord.mainElement.querySelector(`.${styles.rubyWord}`) as HTMLDivElement;
-					const wordBodyEl = realWord.mainElement.querySelector(`.${styles.wordBody}`) as HTMLDivElement;
-					if (rubyWordEl && wordBodyEl) {
-						this.lastWordWithRuby = {
-							mainElement: realWord.mainElement,
-							rubyWordEl,
-							wordBodyEl,
-						};
-					}
-				}
 			}
 		}
 
@@ -707,6 +658,98 @@ export class LyricLineEl extends LyricLineBase {
 		}
 
 		main.appendChild(wrapperWordEl);
+	}
+
+	/**
+	 * 创建合并的 ruby 短语单词
+	 * 将多个共享 ruby 的单词合并成一个 DOM 结构
+	 */
+	private createRubyPhraseWord(
+		words: LyricWord[],
+		shouldEmphasize: boolean,
+		hasRubyLine: boolean,
+		hasRomanLine: boolean,
+	): RealWord {
+		const mainWordEl = document.createElement("span");
+		const subElements: HTMLSpanElement[] = [];
+
+		const wordContainer = hasRubyLine
+			? document.createElement("div")
+			: mainWordEl;
+		let rubyWordEl: HTMLDivElement | undefined;
+
+		if (hasRubyLine) {
+			rubyWordEl = document.createElement("div");
+			// 合并所有单词的 ruby
+			for (const word of words) {
+				const rubySegments = this.getRubySegments(word);
+				for (const ruby of rubySegments) {
+					const rubyPartEl = document.createElement("span");
+					rubyPartEl.innerText = ruby.word;
+					rubyPartEl.dataset.startTime = String(ruby.startTime);
+					rubyPartEl.dataset.endTime = String(ruby.endTime);
+					rubyWordEl.appendChild(rubyPartEl);
+				}
+			}
+			rubyWordEl.classList.add(styles.rubyWord);
+			mainWordEl.classList.add(styles.wordWithRuby);
+			wordContainer.classList.add(styles.wordBody);
+			mainWordEl.appendChild(rubyWordEl);
+			mainWordEl.appendChild(wordContainer);
+		}
+
+		// 创建每个单词的内容
+		for (const word of words) {
+			const wordContentEl = document.createElement("span");
+			const romanWord = word.romanWord?.trim() ?? "";
+
+			// 保存时间信息到 dataset，供动画使用
+			wordContentEl.dataset.startTime = String(word.startTime);
+			wordContentEl.dataset.endTime = String(word.endTime);
+
+			if (shouldEmphasize) {
+				wordContentEl.classList.add(styles.emphasize);
+				const wordEl = document.createElement("div");
+				for (const char of word.word.trim()) {
+					const charEl = document.createElement("span");
+					charEl.innerText = char;
+					subElements.push(charEl);
+					wordEl.appendChild(charEl);
+				}
+				wordContentEl.appendChild(wordEl);
+			} else {
+				const wordEl = document.createElement("div");
+				wordEl.innerText = word.word.trim();
+				wordContentEl.appendChild(wordEl);
+			}
+
+			if (hasRomanLine) {
+				const romanWordEl = document.createElement("div");
+				romanWordEl.classList.add(styles.romanWord);
+				const romanWordSpan = document.createElement("span");
+				romanWordSpan.innerText = romanWord.length > 0 ? romanWord : "\u00A0";
+				romanWordEl.appendChild(romanWordSpan);
+				wordContentEl.appendChild(romanWordEl);
+			}
+
+			wordContainer.appendChild(wordContentEl);
+		}
+
+		// 使用第一个单词的信息作为基础
+		const firstWord = words[0];
+		const realWord: RealWord = {
+			...firstWord,
+			mainElement: mainWordEl,
+			subElements: subElements,
+			elementAnimations: [this.initFloatAnimation(firstWord, mainWordEl)],
+			maskAnimations: [],
+			width: 0,
+			height: 0,
+			padding: 0,
+			shouldEmphasize: shouldEmphasize,
+		};
+
+		return realWord;
 	}
 
 	private initFloatAnimation(word: LyricWord, wordEl: HTMLSpanElement) {
@@ -926,21 +969,10 @@ export class LyricLineEl extends LyricLineBase {
 				this.lyricLine.endTime,
 			) - this.lyricLine.startTime;
 
-		// 收集所有需要动画的单词（包括合并的 ruby 单词）
-		const animatedWords: RealWord[] = [];
-		for (const word of this.splittedWords) {
-			// 只处理有 ruby 且是短语起始的单词，或者没有 ruby 的单词
-			const hasRuby = (word.ruby?.length ?? 0) > 0;
-			if (!hasRuby || word.rubyPhraseStart) {
-				animatedWords.push(word);
-			}
-		}
-
-		animatedWords.forEach((word, i) => {
+		this.splittedWords.forEach((word, i) => {
 			const wordEl = word.mainElement;
 			if (!wordEl) return;
 
-			const hasRuby = (word.ruby?.length ?? 0) > 0;
 			const fadeWidth = word.height * this.lyricPlayer.getWordFadeWidth();
 
 			// 取消之前的动画
@@ -949,248 +981,9 @@ export class LyricLineEl extends LyricLineBase {
 			}
 			word.maskAnimations = [];
 
-			if (hasRuby && word.rubyWordEl && word.wordBodyEl) {
-				// 有 ruby 的情况：分别为 rubyWord 和 wordBody 创建动画
-				this.createRubyWordAnimation(word, word.rubyWordEl, totalFadeDuration, fadeWidth, i);
-				this.createWordBodyAnimation(word, word.wordBodyEl, totalFadeDuration, fadeWidth, i);
-			} else if (word.wordBodyEl) {
-				// 没有 ruby 但使用了 wordBody 结构（hasRubyLine 为 true 时）
-				// 只为 wordBody 创建动画，不需要 rubyWord 动画
-				this.createWordBodyAnimation(word, word.wordBodyEl, totalFadeDuration, fadeWidth, i);
-			} else {
-				// 没有 ruby 且没有 wordBody 的情况：为整个 word 创建动画
-				this.createWordAnimation(word, wordEl, totalFadeDuration, fadeWidth, i);
-			}
+			// 为单词创建动画
+			this.createWordAnimation(word, wordEl, totalFadeDuration, fadeWidth, i);
 		});
-	}
-
-	/**
-	 * 为 rubyWord 下的每个 span 创建动画
-	 * 每个 span 负责单个 ruby 字符的动画
-	 */
-	private createRubyWordAnimation(
-		word: RealWord,
-		rubyWordEl: HTMLDivElement,
-		totalFadeDuration: number,
-		fadeWidth: number,
-		index: number,
-	) {
-		// 获取所有 ruby span 元素
-		const rubySpans = Array.from(rubyWordEl.children) as HTMLSpanElement[];
-		if (rubySpans.length === 0) return;
-
-		// 收集所有 ruby 字符的时间信息（包括当前单词和被合并的单词）
-		// 使用数组保存 [rubySegment, parentWord] 对
-		const allRubyData: { ruby: LyricWordBase; parentWord: LyricWord }[] = [];
-
-		// 首先添加当前单词的 ruby
-		const currentRubySegments = this.getRubySegments(word);
-		for (const ruby of currentRubySegments) {
-			allRubyData.push({ ruby, parentWord: word });
-		}
-
-		// 添加被合并单词的 ruby
-		if (word.mergedWords) {
-			for (const mergedWord of word.mergedWords) {
-				const mergedRubySegments = this.getRubySegments(mergedWord);
-				for (const ruby of mergedRubySegments) {
-					allRubyData.push({ ruby, parentWord: mergedWord });
-				}
-			}
-		}
-
-		if (allRubyData.length === 0) return;
-
-		// 收集所有 ruby 字符的时间信息
-		const rubyChars: { startTime: number; endTime: number; element: HTMLSpanElement }[] = [];
-		let spanIndex = 0;
-
-		for (const { ruby, parentWord } of allRubyData) {
-			// 使用 parentWord 的时间作为默认值，而不是 word（短语起始单词）的时间
-			const rubyStartTime = Number.isFinite(ruby.startTime) ? ruby.startTime : parentWord.startTime;
-			const rubyEndTime = Number.isFinite(ruby.endTime) ? ruby.endTime : parentWord.endTime;
-			const rubyStart = Math.max(rubyStartTime, parentWord.startTime);
-			const rubyEnd = Math.min(Math.max(rubyEndTime, rubyStart), parentWord.endTime);
-			const rubyDuration = Math.max(0, rubyEnd - rubyStart);
-			const perCharDuration = rubyDuration / ruby.word.length;
-
-			for (let i = 0; i < ruby.word.length; i++) {
-				if (spanIndex < rubySpans.length) {
-					rubyChars.push({
-						startTime: rubyStart + perCharDuration * i,
-						endTime: rubyStart + perCharDuration * (i + 1),
-						element: rubySpans[spanIndex],
-					});
-					spanIndex++;
-				}
-			}
-		}
-
-		// 为每个 ruby 字符的 span 创建动画
-		for (let i = 0; i < rubyChars.length; i++) {
-			const char = rubyChars[i];
-			const charWidth = char.element.clientWidth || 0;
-
-			const [maskImage, totalAspect] = generateFadeGradient(
-				fadeWidth / Math.max(1, charWidth),
-			);
-			const totalAspectStr = `${totalAspect * 100}% 100%`;
-
-			// 设置遮罩样式
-			if (this.lyricPlayer.supportMaskImage) {
-				char.element.style.maskImage = maskImage;
-				char.element.style.maskRepeat = "no-repeat";
-				char.element.style.maskOrigin = "left";
-				char.element.style.maskSize = totalAspectStr;
-			} else {
-				char.element.style.webkitMaskImage = maskImage;
-				char.element.style.webkitMaskRepeat = "no-repeat";
-				char.element.style.webkitMaskOrigin = "left";
-				char.element.style.webkitMaskSize = totalAspectStr;
-			}
-
-			const minOffset = -(charWidth + fadeWidth);
-			const clampOffset = (x: number) => Math.max(minOffset, Math.min(0, x));
-
-			// 生成动画帧
-			const frames: Keyframe[] = [];
-			const charStartStamp = char.startTime - this.lyricLine.startTime;
-			const charEndStamp = char.endTime - this.lyricLine.startTime;
-
-			// 初始状态（遮罩在左侧外）
-			frames.push({
-				offset: 0,
-				maskPosition: `${clampOffset(-charWidth - fadeWidth)}px 0`,
-			});
-
-			// 开始时间前保持隐藏
-			const startOffset = Math.max(0, charStartStamp / totalFadeDuration);
-			if (startOffset > 0) {
-				frames.push({
-					offset: startOffset,
-					maskPosition: `${clampOffset(-charWidth - fadeWidth)}px 0`,
-				});
-			}
-
-			// 动画过程：从左侧外移动到完全显示
-			const endOffset = Math.min(1, charEndStamp / totalFadeDuration);
-			frames.push({
-				offset: endOffset,
-				maskPosition: `${clampOffset(fadeWidth * 0.5)}px 0`,
-			});
-
-			// 保持显示状态到结束
-			if (endOffset < 1) {
-				frames.push({
-					offset: 1,
-					maskPosition: `${clampOffset(fadeWidth * 0.5)}px 0`,
-				});
-			}
-
-			try {
-				const ani = char.element.animate(frames, {
-					duration: totalFadeDuration || 1,
-					id: `fade-ruby-char-${char.element.innerText}-${index}-${i}`,
-					fill: "both",
-				});
-				ani.pause();
-				word.maskAnimations.push(ani);
-			} catch (err) {
-				console.warn("应用 ruby 字符渐变动画发生错误", frames, totalFadeDuration, err);
-			}
-		}
-	}
-
-	/**
-	 * 为 wordBody 下的每个 span 创建动画
-	 * 每个 span 负责单个 base 字符（或单词）的动画
-	 */
-	private createWordBodyAnimation(
-		word: RealWord,
-		wordBodyEl: HTMLDivElement,
-		totalFadeDuration: number,
-		fadeWidth: number,
-		index: number,
-	) {
-		// 获取所有 wordBody 下的 span 元素
-		const wordSpans = Array.from(wordBodyEl.children) as HTMLSpanElement[];
-		if (wordSpans.length === 0) return;
-
-		// 收集所有 base 单词的时间信息和对应的元素
-		// 每个条目包含：原文 div 和 romanWord 内部的 span
-		const baseWords: {
-			word: string;
-			startTime: number;
-			endTime: number;
-			baseTextEl: HTMLDivElement;
-			romanWordSpan?: HTMLSpanElement;
-		}[] = [];
-
-		// 首先添加当前单词
-		if (wordSpans.length > 0) {
-			// 获取 span 内第一个 div（包裹原文的 div）
-			const baseTextEl = wordSpans[0].querySelector("div:first-child") as HTMLDivElement;
-			// 获取 romanWord 内部的 span（如果有）
-			const romanWordSpan = wordSpans[0].querySelector(`.${styles.romanWord} > span`) as HTMLSpanElement | null;
-			if (baseTextEl) {
-				baseWords.push({
-					word: word.word,
-					startTime: word.startTime,
-					endTime: word.endTime,
-					baseTextEl,
-					romanWordSpan: romanWordSpan || undefined,
-				});
-			}
-		}
-
-		// 添加被合并的单词（从 mergedWords 中获取）
-		if (word.mergedWords && word.mergedWords.length > 0) {
-			for (let i = 0; i < word.mergedWords.length && i + 1 < wordSpans.length; i++) {
-				const mergedWord = word.mergedWords[i];
-				// 获取 span 内第一个 div（包裹原文的 div）
-				const baseTextEl = wordSpans[i + 1].querySelector("div:first-child") as HTMLDivElement;
-				// 获取 romanWord 内部的 span（如果有）
-				const romanWordSpan = wordSpans[i + 1].querySelector(`.${styles.romanWord} > span`) as HTMLSpanElement | null;
-				if (baseTextEl) {
-					baseWords.push({
-						word: mergedWord.word,
-						startTime: mergedWord.startTime,
-						endTime: mergedWord.endTime,
-						baseTextEl,
-						romanWordSpan: romanWordSpan || undefined,
-					});
-				}
-			}
-		}
-
-		// 为每个 base 单词的原文 div 和 romanWord 内部的 span 创建动画
-		for (let i = 0; i < baseWords.length; i++) {
-			const baseWord = baseWords[i];
-
-			// 为原文 div 创建动画
-			this.applyMaskAnimation(
-				baseWord.baseTextEl,
-				baseWord.startTime,
-				baseWord.endTime,
-				totalFadeDuration,
-				fadeWidth,
-				word,
-				`fade-base-word-${baseWord.word}-${index}-${i}`,
-			);
-
-			// 为 romanWord 内部的 span 创建动画（如果存在）
-			if (baseWord.romanWordSpan) {
-				this.applyMaskAnimation(
-					baseWord.romanWordSpan as unknown as HTMLDivElement,
-					baseWord.startTime,
-					baseWord.endTime,
-					totalFadeDuration,
-					fadeWidth,
-					word,
-					`fade-roman-word-${baseWord.word}-${index}-${i}`,
-				);
-			}
-		}
 	}
 
 	/**
@@ -1286,35 +1079,118 @@ export class LyricLineEl extends LyricLineBase {
 		fadeWidth: number,
 		index: number,
 	) {
-		// 获取包裹原文的 div（第一个子 div）
-		const baseTextEl = wordEl.querySelector("div:first-child") as HTMLDivElement | null;
-		if (!baseTextEl) return;
+		// 检查是否是 ruby 短语（有 wordBody 结构）
+		const wordBodyEl = wordEl.querySelector(`.${styles.wordBody}`) as HTMLDivElement | null;
+		const rubyWordEl = wordEl.querySelector(`.${styles.rubyWord}`) as HTMLDivElement | null;
 
-		// 获取 romanWord 内部的 span（如果有）
-		const romanWordSpan = wordEl.querySelector(`.${styles.romanWord} > span`) as HTMLSpanElement | null;
+		if (wordBodyEl && rubyWordEl) {
+			// 处理 ruby 短语：为每个子单词和 ruby 字符创建动画
+			this.createRubyPhraseAnimation(word, wordEl, wordBodyEl, rubyWordEl, totalFadeDuration, fadeWidth, index);
+		} else {
+			// 普通单词处理
+			// 获取包裹原文的 div（第一个子 div）
+			const baseTextEl = wordEl.querySelector("div:first-child") as HTMLDivElement | null;
+			if (!baseTextEl) return;
 
-		// 为包裹原文的 div 创建动画
-		this.applyMaskAnimationToElement(
-			baseTextEl,
-			word.startTime,
-			word.endTime,
-			totalFadeDuration,
-			fadeWidth,
-			word,
-			`fade-word-base-${word.word}-${index}`,
-		);
+			// 获取 romanWord 内部的 span（如果有）
+			const romanWordSpan = wordEl.querySelector(`.${styles.romanWord} > span`) as HTMLSpanElement | null;
 
-		// 为 romanWord 内部的 span 创建动画（如果存在）
-		if (romanWordSpan) {
+			// 为包裹原文的 div 创建动画
 			this.applyMaskAnimationToElement(
-				romanWordSpan as unknown as HTMLDivElement,
+				baseTextEl,
 				word.startTime,
 				word.endTime,
 				totalFadeDuration,
 				fadeWidth,
 				word,
-				`fade-word-roman-${word.word}-${index}`,
+				`fade-word-base-${word.word}-${index}`,
 			);
+
+			// 为 romanWord 内部的 span 创建动画（如果存在）
+			if (romanWordSpan) {
+				this.applyMaskAnimationToElement(
+					romanWordSpan as unknown as HTMLDivElement,
+					word.startTime,
+					word.endTime,
+					totalFadeDuration,
+					fadeWidth,
+					word,
+					`fade-word-roman-${word.word}-${index}`,
+				);
+			}
+		}
+	}
+
+	/**
+	 * 为 ruby 短语创建动画
+	 * 分别为 rubyWord 下的每个字符和 wordBody 下的每个单词创建动画
+	 */
+	private createRubyPhraseAnimation(
+		word: RealWord,
+		_wordEl: HTMLSpanElement,
+		wordBodyEl: HTMLDivElement,
+		rubyWordEl: HTMLDivElement,
+		totalFadeDuration: number,
+		fadeWidth: number,
+		index: number,
+	) {
+		// 获取所有 ruby span 元素
+		const rubySpans = Array.from(rubyWordEl.children) as HTMLSpanElement[];
+		// 获取所有 wordBody 下的子元素（每个子元素代表一个单词）
+		const wordSpans = Array.from(wordBodyEl.children) as HTMLSpanElement[];
+
+		// 为每个 ruby 字符创建动画
+		for (let i = 0; i < rubySpans.length; i++) {
+			const rubySpan = rubySpans[i];
+			const startTime = Number(rubySpan.dataset.startTime || word.startTime);
+			const endTime = Number(rubySpan.dataset.endTime || word.endTime);
+
+			this.applyMaskAnimation(
+				rubySpan as unknown as HTMLDivElement,
+				startTime,
+				endTime,
+				totalFadeDuration,
+				fadeWidth,
+				word,
+				`fade-ruby-char-${index}-${i}`,
+			);
+		}
+
+		// 为每个子单词创建动画
+		for (let i = 0; i < wordSpans.length; i++) {
+			const wordSpan = wordSpans[i];
+			// 获取原文 div（第一个子 div）
+			const baseTextEl = wordSpan.querySelector("div:first-child") as HTMLDivElement | null;
+			// 获取 romanWord 内部的 span
+			const romanWordSpan = wordSpan.querySelector(`.${styles.romanWord} > span`) as HTMLSpanElement | null;
+
+			// 从 dataset 获取时间，或使用默认时间
+			const startTime = Number(wordSpan.dataset.startTime || word.startTime);
+			const endTime = Number(wordSpan.dataset.endTime || word.endTime);
+
+			if (baseTextEl) {
+				this.applyMaskAnimation(
+					baseTextEl,
+					startTime,
+					endTime,
+					totalFadeDuration,
+					fadeWidth,
+					word,
+					`fade-word-base-${index}-${i}`,
+				);
+			}
+
+			if (romanWordSpan) {
+				this.applyMaskAnimation(
+					romanWordSpan as unknown as HTMLDivElement,
+					startTime,
+					endTime,
+					totalFadeDuration,
+					fadeWidth,
+					word,
+					`fade-word-roman-${index}-${i}`,
+				);
+			}
 		}
 	}
 
