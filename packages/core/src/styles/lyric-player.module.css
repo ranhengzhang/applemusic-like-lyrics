@@ -67,7 +67,7 @@
 			filter 0.2s,
 			background-color 0.25s,
 			box-shadow 0.25s;
-		opacity: 0.4;
+		opacity: var(--amll-lp-bg-line-opacity, 0.4);
 	}
 }
 
@@ -89,7 +89,7 @@
 	}
 
 	&:not(:global(.playing)) > .lyricBgLine {
-		opacity: 0.4;
+		opacity: var(--amll-lp-bg-line-opacity, 0.4);
 	}
 }
 
