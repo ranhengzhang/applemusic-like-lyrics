@@ -520,22 +520,18 @@ export class LyricLineEl extends LyricLineBase {
 			wordContainer.appendChild(wordContentEl);
 		}
 
+		// 总是创建字符级别的元素，用于字符级动画
+		const wordEl = document.createElement("div");
+		for (const char of word.word.trim()) {
+			const charEl = document.createElement("span");
+			charEl.innerText = char;
+			subElements.push(charEl);
+			wordEl.appendChild(charEl);
+		}
+		wordContentEl.appendChild(wordEl);
+
 		if (shouldEmphasize) {
 			mainWordEl.classList.add(styles.emphasize);
-			// 创建一个 div 包裹所有字符，保持 DOM 结构一致性
-			const wordEl = document.createElement("div");
-			for (const char of word.word.trim()) {
-				const charEl = document.createElement("span");
-				charEl.innerText = char;
-				subElements.push(charEl);
-				wordEl.appendChild(charEl);
-			}
-			wordContentEl.appendChild(wordEl);
-		} else {
-			// 总是创建一个 div 来包裹单词文本，保持 DOM 结构一致
-			const wordEl = document.createElement("div");
-			wordEl.innerText = word.word.trim();
-			wordContentEl.appendChild(wordEl);
 		}
 
 		if (hasRomanLine) {
@@ -552,7 +548,7 @@ export class LyricLineEl extends LyricLineBase {
 			...word,
 			mainElement: mainWordEl,
 			subElements: subElements,
-			elementAnimations: [this.initFloatAnimation(word, mainWordEl)],
+			elementAnimations: this.initFloatAnimation(word, subElements),
 			maskAnimations: [],
 			width: 0,
 			height: 0,
@@ -707,20 +703,18 @@ export class LyricLineEl extends LyricLineBase {
 			wordContentEl.dataset.startTime = String(word.startTime);
 			wordContentEl.dataset.endTime = String(word.endTime);
 
+			// 总是创建字符级别的元素，用于字符级动画
+			const wordEl = document.createElement("div");
+			for (const char of word.word.trim()) {
+				const charEl = document.createElement("span");
+				charEl.innerText = char;
+				subElements.push(charEl);
+				wordEl.appendChild(charEl);
+			}
+			wordContentEl.appendChild(wordEl);
+
 			if (shouldEmphasize) {
 				wordContentEl.classList.add(styles.emphasize);
-				const wordEl = document.createElement("div");
-				for (const char of word.word.trim()) {
-					const charEl = document.createElement("span");
-					charEl.innerText = char;
-					subElements.push(charEl);
-					wordEl.appendChild(charEl);
-				}
-				wordContentEl.appendChild(wordEl);
-			} else {
-				const wordEl = document.createElement("div");
-				wordEl.innerText = word.word.trim();
-				wordContentEl.appendChild(wordEl);
 			}
 
 			if (hasRomanLine) {
@@ -741,7 +735,7 @@ export class LyricLineEl extends LyricLineBase {
 			...firstWord,
 			mainElement: mainWordEl,
 			subElements: subElements,
-			elementAnimations: [this.initFloatAnimation(firstWord, mainWordEl)],
+			elementAnimations: this.initFloatAnimation(firstWord, subElements),
 			maskAnimations: [],
 			width: 0,
 			height: 0,
@@ -752,33 +746,43 @@ export class LyricLineEl extends LyricLineBase {
 		return realWord;
 	}
 
-	private initFloatAnimation(word: LyricWord, wordEl: HTMLSpanElement) {
-		const delay = word.startTime - this.lyricLine.startTime;
+	private initFloatAnimation(word: LyricWord, subElements: HTMLSpanElement[]): Animation[] {
+		const baseDelay = word.startTime - this.lyricLine.startTime;
 		const duration = Math.max(1000, word.endTime - word.startTime);
 		let up = 0.05;
 		if (this.lyricLine.isBG) {
 			up *= 2;
 		}
-		const a = wordEl.animate(
-			[
+
+		// 如果没有子元素（空格等情况），返回空数组
+		if (subElements.length === 0) {
+			return [];
+		}
+
+		// 为每个字符创建独立的浮动动画，依次延迟
+		return subElements.map((charEl, i) => {
+			const charDelay = baseDelay + (duration / 2.5 / subElements.length) * i;
+			const a = charEl.animate(
+				[
+					{
+						transform: "translateY(0px)",
+					},
+					{
+						transform: `translateY(${-up}em)`,
+					},
+				],
 				{
-					transform: "translateY(0px)",
+					duration: Number.isFinite(duration) ? duration : 0,
+					delay: Number.isFinite(charDelay) ? charDelay : 0,
+					id: "float-word",
+					composite: "add",
+					fill: "both",
+					easing: "ease-out",
 				},
-				{
-					transform: `translateY(${-up}em)`,
-				},
-			],
-			{
-				duration: Number.isFinite(duration) ? duration : 0,
-				delay: Number.isFinite(delay) ? delay : 0,
-				id: "float-word",
-				composite: "add",
-				fill: "both",
-				easing: "ease-out",
-			},
-		);
-		a.pause();
-		return a;
+			);
+			a.pause();
+			return a;
+		});
 	}
 	// 按照原 Apple Music 参考，强调效果只应用缩放、轻微左右位移和辉光效果，原主要的悬浮位移效果不变
 	// 为了避免产生锯齿抖动感，使用 matrix3d 来实现缩放和位移
