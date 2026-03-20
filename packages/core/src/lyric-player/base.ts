@@ -804,6 +804,39 @@ export abstract class LyricPlayerBase
 		let delay = 0;
 		let baseDelay = sync ? 0 : 0.05;
 		let setDots = false;
+
+		// 预处理：计算哪些 BG 行需要放在主行上方（BG 行起始时间比主行第一个音节早 >1秒）
+		const bgAboveMain = new Set<number>();
+		for (let i = 0; i < this.currentLyricLineObjects.length; i++) {
+			const line = this.currentLyricLineObjects[i].getLine();
+			if (line.isBG && i > 0) {
+				const prevLine = this.currentLyricLineObjects[i - 1].getLine();
+				if (!prevLine.isBG) {
+					// 获取主行的第一个音节起始时间
+					const mainFirstWordStart = prevLine.words[0]?.startTime ?? prevLine.startTime;
+					// 获取 BG 行的起始时间
+					const bgStartTime = line.startTime;
+					// 如果 BG 行比主行第一个音节早 >1秒，则放在主行上方
+					if (mainFirstWordStart - bgStartTime > 1000) {
+						bgAboveMain.add(i);
+					}
+				}
+			}
+		}
+
+		// 预处理：计算哪些 BG 行当前是激活状态且需要放在主行上方
+		// 这些 BG 行会影响主行的位置
+		const activeBgAboveMain = new Set<number>();
+		for (let i = 0; i < this.currentLyricLineObjects.length; i++) {
+			const line = this.currentLyricLineObjects[i].getLine();
+			const hasBuffered = this.bufferedLines.has(i);
+			const isActive =
+				hasBuffered || (i >= this.scrollToIndex && i < latestIndex);
+			if (line.isBG && bgAboveMain.has(i) && isActive) {
+				activeBgAboveMain.add(i);
+			}
+		}
+
 		this.currentLyricLineObjects.forEach((lineObj, i) => {
 			const hasBuffered = this.bufferedLines.has(i);
 			const isActive =
@@ -890,8 +923,33 @@ export abstract class LyricPlayerBase
 				? LyricLineRenderMode.GRADIENT
 				: LyricLineRenderMode.SOLID;
 
+			// 计算当前行的位置
+			let linePos = curPos;
+
+			// 如果这行是 BG 行且需要放在主行上方，调整位置
+			if (line.isBG && bgAboveMain.has(i) && (isActive || !this.isPlaying)) {
+				// 获取主行的高度（前一行）
+				const mainLineHeight = this.lyricLinesSize.get(this.currentLyricLineObjects[i - 1])?.[1] ?? LINE_HEIGHT_FALLBACK;
+				// 获取 BG 行的高度
+				const bgLineHeight = this.lyricLinesSize.get(lineObj)?.[1] ?? LINE_HEIGHT_FALLBACK;
+				// BG 行向上偏移：主行高度 + BG 行高度（让 BG 行在主行上方）
+				linePos = curPos - mainLineHeight - bgLineHeight;
+				// 如果前一行（主行）后紧跟一个激活的BG行，主行已经向下偏移了 bgLineHeight
+				// 所以 BG 行也需要向下偏移 bgLineHeight，以保持相对位置正确
+				if (i > 0 && activeBgAboveMain.has(i)) {
+					linePos += bgLineHeight;
+				}
+			}
+
+			// 如果这行是主行且后紧跟一个需要放在主行上方的激活BG行，
+			// 则主行需要向下移动，为BG行腾出空间
+			if (!line.isBG && activeBgAboveMain.has(i + 1)) {
+				const bgLineHeight = this.lyricLinesSize.get(this.currentLyricLineObjects[i + 1])?.[1] ?? LINE_HEIGHT_FALLBACK;
+				linePos += bgLineHeight;
+			}
+
 			lineObj.setTransform(
-				curPos,
+				linePos,
 				targetScale,
 				targetOpacity,
 				window.innerWidth <= 1024 ? blurLevel * 0.8 : blurLevel,
