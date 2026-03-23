@@ -39,6 +39,10 @@ export type LyricLineMouseEventListener = (evt: LyricLineMouseEvent) => void;
 export class DomLyricPlayer extends LyricPlayerBase {
 	override currentLyricLineObjects: LyricLineEl[] = [];
 
+	// 方案二：批量样式更新队列
+	private styleUpdateQueue = new Set<() => void>();
+	private scheduledAnimationFrame: number | null = null;
+
 	override onResize(): void {
 		const computedStyles = getComputedStyle(this.element);
 		this._baseFontSize = Number.parseFloat(computedStyles.fontSize);
@@ -177,7 +181,41 @@ export class DomLyricPlayer extends LyricPlayerBase {
 		}
 	}
 
+	/**
+	 * 调度样式更新（方案二优化）
+	 * 将样式更新加入队列，在 requestAnimationFrame 中批量执行
+	 */
+	scheduleStyleUpdate(updateFn: () => void) {
+		this.styleUpdateQueue.add(updateFn);
+
+		if (this.scheduledAnimationFrame === null) {
+			this.scheduledAnimationFrame = requestAnimationFrame(() => {
+				this.flushAllStyles();
+			});
+		}
+	}
+
+	/**
+	 * 批量刷新所有样式（在 requestAnimationFrame 中执行）
+	 */
+	private flushAllStyles() {
+		this.scheduledAnimationFrame = null;
+
+		// 一次性执行所有待处理的样式更新
+		for (const updateFn of this.styleUpdateQueue) {
+			updateFn();
+		}
+		this.styleUpdateQueue.clear();
+	}
+
 	override dispose(): void {
+		// 取消待处理的动画帧
+		if (this.scheduledAnimationFrame !== null) {
+			cancelAnimationFrame(this.scheduledAnimationFrame);
+			this.scheduledAnimationFrame = null;
+		}
+		this.styleUpdateQueue.clear();
+
 		super.dispose();
 		this.element.remove();
 		for (const el of this.currentLyricLineObjects) {

@@ -373,9 +373,50 @@ export class LyricLineEl extends LyricLineBase {
 			this.built = false;
 		}
 	}
+	// 方案二：批量样式更新优化
+	private pendingStyleUpdate = false;
+	private cachedStyle = {
+		posY: 0,
+		scale: 100,
+		blur: 0,
+	};
+
+	/**
+	 * 标记需要样式更新，由 LyricPlayer 批量调度
+	 */
+	markStyleUpdateNeeded() {
+		this.pendingStyleUpdate = true;
+	}
+
+	/**
+	 * 执行实际的样式更新（在 requestAnimationFrame 中调用）
+	 */
+	flushStyles() {
+		if (!this.pendingStyleUpdate) return;
+		this.pendingStyleUpdate = false;
+
+		const style = this.buildStyleString();
+		if (style !== this.lastStyle) {
+			this.lastStyle = style;
+			this.element.setAttribute("style", style);
+		}
+	}
+
+	/**
+	 * 构建样式字符串
+	 */
+	private buildStyleString(): string {
+		const { posY, scale } = this.cachedStyle;
+		let style = `transform:translateY(${posY.toFixed(1)}px) scale(${(scale / 100).toFixed(4)});`;
+		if (!this.lyricPlayer.getEnableSpring() && this.isInSight) {
+			style += `transition-delay:${this.delay}ms;`;
+		}
+		style += `filter:blur(${Math.min(5, this.cachedStyle.blur).toFixed(3)}px);`;
+		return style;
+	}
+
 	private rebuildStyle() {
 		let style = "";
-		// if (this.lyricPlayer.getEnableSpring()) {
 		style += `transform:translateY(${this.lineTransforms.posY
 			.getCurrentPosition()
 			.toFixed(
@@ -1127,7 +1168,7 @@ export class LyricLineEl extends LyricLineBase {
 
 	/**
 	 * 为 ruby 短语创建动画
-	 * 分别为 rubyWord 下的每个字符和 wordBody 下的每个单词创建动画
+	 * 优化版：将动画应用到 rubyWord 父节点，而不是每个字符，减少 Animation 对象数量
 	 */
 	private createRubyPhraseAnimation(
 		word: RealWord,
@@ -1138,27 +1179,17 @@ export class LyricLineEl extends LyricLineBase {
 		fadeWidth: number,
 		index: number,
 	) {
-		// 获取所有 ruby span 元素
-		const rubySpans = Array.from(rubyWordEl.children) as HTMLSpanElement[];
 		// 获取所有 wordBody 下的子元素（每个子元素代表一个单词）
 		const wordSpans = Array.from(wordBodyEl.children) as HTMLSpanElement[];
 
-		// 为每个 ruby 字符创建动画
-		for (let i = 0; i < rubySpans.length; i++) {
-			const rubySpan = rubySpans[i];
-			const startTime = Number(rubySpan.dataset.startTime || word.startTime);
-			const endTime = Number(rubySpan.dataset.endTime || word.endTime);
-
-			this.applyMaskAnimation(
-				rubySpan as unknown as HTMLDivElement,
-				startTime,
-				endTime,
-				totalFadeDuration,
-				fadeWidth,
-				word,
-				`fade-ruby-char-${index}-${i}`,
-			);
-		}
+		// 为 rubyWord 父节点创建单个动画（替代为每个字符创建动画）
+		this.applyMaskAnimationToRubyContainer(
+			rubyWordEl,
+			totalFadeDuration,
+			fadeWidth,
+			word,
+			`fade-ruby-container-${index}`,
+		);
 
 		// 为每个子单词创建动画
 		for (let i = 0; i < wordSpans.length; i++) {
@@ -1195,6 +1226,108 @@ export class LyricLineEl extends LyricLineBase {
 					`fade-word-roman-${index}-${i}`,
 				);
 			}
+		}
+	}
+
+	/**
+	 * 为 Ruby 容器创建单个遮罩动画
+	 * 通过分段关键帧实现逐字显示效果，但只使用一个 Animation 对象
+	 */
+	private applyMaskAnimationToRubyContainer(
+		containerEl: HTMLDivElement,
+		totalFadeDuration: number,
+		fadeWidth: number,
+		word: RealWord,
+		animationId: string,
+	) {
+		// 获取所有 ruby 字符信息
+		const rubySpans = Array.from(containerEl.children) as HTMLSpanElement[];
+		if (rubySpans.length === 0) return;
+
+		// 计算每个字符的宽度和时间信息
+		const charInfos = rubySpans.map((span) => ({
+			startTime: Number(span.dataset.startTime || word.startTime),
+			endTime: Number(span.dataset.endTime || word.endTime),
+			width: span.clientWidth,
+		}));
+
+		const containerWidth = containerEl.clientWidth;
+
+		const [maskImage, totalAspect] = generateFadeGradient(
+			fadeWidth / Math.max(1, containerWidth),
+		);
+		const totalAspectStr = `${totalAspect * 100}% 100%`;
+
+		// 应用遮罩样式到父节点
+		if (this.lyricPlayer.supportMaskImage) {
+			containerEl.style.maskImage = maskImage;
+			containerEl.style.maskRepeat = "no-repeat";
+			containerEl.style.maskOrigin = "left";
+			containerEl.style.maskSize = totalAspectStr;
+		} else {
+			containerEl.style.webkitMaskImage = maskImage;
+			containerEl.style.webkitMaskRepeat = "no-repeat";
+			containerEl.style.webkitMaskOrigin = "left";
+			containerEl.style.webkitMaskSize = totalAspectStr;
+		}
+
+		const minOffset = -(containerWidth + fadeWidth);
+		const clampOffset = (x: number) => Math.max(minOffset, Math.min(0, x));
+
+		let curPos = -containerWidth - fadeWidth;
+		let timeOffset = 0;
+		const frames: Keyframe[] = [];
+
+		const pushFrame = () => {
+			const time = Math.max(0, Math.min(1, timeOffset));
+			const value = `${clampOffset(curPos)}px 0`;
+			frames.push({ offset: time, maskPosition: value });
+		};
+
+		// 初始帧（全部隐藏）
+		pushFrame();
+
+		// 按时间顺序为每个字符创建关键帧段
+		let lastTimeStamp = 0;
+		charInfos.forEach((charInfo, i) => {
+			const charStartStamp = charInfo.startTime - this.lyricLine.startTime;
+			const charEndStamp = charInfo.endTime - this.lyricLine.startTime;
+
+			// 段1：等待当前字符开始（停顿阶段）
+			const waitDuration = charStartStamp - lastTimeStamp;
+			if (waitDuration > 0) {
+				timeOffset += waitDuration / totalFadeDuration;
+				pushFrame();
+			}
+
+			// 段2：字符显示期间，移动遮罩
+			// 移动距离 = 当前字符宽度 + 渐变宽度调整
+			const moveDistance = charInfo.width + (i === 0 ? fadeWidth * 1.5 : fadeWidth * 0.5);
+			curPos += moveDistance;
+
+			const charDuration = charInfo.endTime - charInfo.startTime;
+			timeOffset += charDuration / totalFadeDuration;
+			pushFrame();
+
+			lastTimeStamp = charEndStamp;
+		});
+
+		// 保持显示到结束
+		if (timeOffset < 1) {
+			timeOffset = 1;
+			pushFrame();
+		}
+
+		try {
+			const ani = containerEl.animate(frames, {
+				duration: totalFadeDuration || 1,
+				id: animationId,
+				fill: "both",
+			});
+			ani.pause();
+			word.maskAnimations.push(ani);
+		} catch (err) {
+			console.warn("应用 Ruby 容器渐变动画发生错误", frames, totalFadeDuration, err);
 		}
 	}
 
@@ -1404,19 +1537,35 @@ export class LyricLineEl extends LyricLineBase {
 	update(delta = 0) {
 		if (!this.lyricPlayer.getEnableSpring()) return;
 
+		// 1. 更新弹簧计算（纯数学运算）
 		this.lineTransforms.posY.update(delta);
 		this.lineTransforms.scale.update(delta);
 
-		if (this.isInSight) {
-			this.show();
-		} else {
-			this.hide();
+		// 2. 缓存计算结果
+		this.cachedStyle.posY = this.lineTransforms.posY.getCurrentPosition();
+		this.cachedStyle.scale = this.lineTransforms.scale.getCurrentPosition();
+
+		// 3. 检查可见性变化
+		const isInSight = this.isInSight;
+		if (isInSight !== this._lastInSight) {
+			this._lastInSight = isInSight;
+			if (isInSight) this.show();
+			else this.hide();
 		}
 
-		const currentScale = this.lineTransforms.scale.getCurrentPosition() / 100;
+		// 4. 计算透明度（仍然需要每帧更新，但延迟 DOM 写入）
+		const currentScale = this.cachedStyle.scale / 100;
 		this.updateMaskAlphaTargets(currentScale);
 		this.applyAlphaToDom(delta);
+
+		// 5. 标记需要样式更新，由 LyricPlayer 批量调度
+		if (!this.pendingStyleUpdate) {
+			this.pendingStyleUpdate = true;
+			this.lyricPlayer.scheduleStyleUpdate(() => this.flushStyles());
+		}
 	}
+
+	private _lastInSight = false;
 
 	_getDebugTargetPos(): string {
 		return `[位移: ${this.top}; 缩放: ${this.scale}; 延时: ${this.delay}]`;
