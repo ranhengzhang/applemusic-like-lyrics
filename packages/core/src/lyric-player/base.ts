@@ -832,7 +832,7 @@ export abstract class LyricPlayerBase
 			const hasBuffered = this.bufferedLines.has(i);
 			const isActive =
 				hasBuffered || (i >= this.scrollToIndex && i < latestIndex);
-			if (line.isBG && bgAboveMain.has(i) && isActive) {
+			if (line.isBG && bgAboveMain.has(i) && (isActive || !this.isPlaying)) {
 				activeBgAboveMain.add(i);
 			}
 		}
