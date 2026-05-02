@@ -12,6 +12,10 @@ import {
 	matrix4ToCSS,
 	scaleMatrix4,
 } from "../../utils/matrix.ts";
+import {
+	segmentRomanByRuby,
+	normalizeSpaces,
+} from "../../utils/roman-segmenter.ts";
 import { LyricLineBase } from "../base.ts";
 import type { DomLyricPlayer } from ".";
 
@@ -50,10 +54,20 @@ function generateFadeGradient(
 	const totalAspect = 2 + width + padding;
 	const widthInTotal = width / totalAspect;
 	const leftPos = (1 - widthInTotal) / 2;
+
+	// 创建阶梯式渐变：开始更深，结束更浅
+	// 使用多段渐变实现阶梯效果
+	const step1 = leftPos; // 纯 bright 结束位置
+	const step2 = leftPos + widthInTotal * 0.3; // 深色调过渡点
+	const step3 = leftPos + widthInTotal * 0.7; // 浅色调过渡点
+	const step4 = leftPos + widthInTotal; // 纯 dark 开始位置
+
+	// 解析颜色，创建更深的开始色和更浅的结束色
+	const deepColor = bright.replace(/[\d.]+\)$/, "1.0)"); // 完全不透明的 bright
+	const lightColor = dark.replace(/[\d.]+\)$/, "0.3)"); // 更透明的 dark
+
 	return [
-		`linear-gradient(to right,${bright} ${leftPos * 100}%,${dark} ${
-			(leftPos + widthInTotal) * 100
-		}%)`,
+		`linear-gradient(to right,${bright} ${step1 * 100}%,${deepColor} ${step2 * 100}%,${lightColor} ${step3 * 100}%,${dark} ${step4 * 100}%)`,
 		totalAspect,
 	];
 }
@@ -578,10 +592,42 @@ export class LyricLineEl extends LyricLineBase {
 		if (hasRomanLine) {
 			const romanWordEl = document.createElement("div");
 			romanWordEl.classList.add(styles.romanWord);
-			// 在 romanWord 内部添加一层 span 包裹音译内容
-			const romanWordSpan = document.createElement("span");
-			romanWordSpan.innerText = romanWord.length > 0 ? romanWord : "\u00A0";
-			romanWordEl.appendChild(romanWordSpan);
+
+			// 尝试按照 ruby 分段 roman
+			const rubySegments = this.getRubySegments(word);
+			const romanSegments =
+				rubySegments.length > 0
+					? segmentRomanByRuby(word.romanWord ?? "", rubySegments)
+					: null;
+
+			if (romanSegments && romanSegments.length > 0) {
+				// 处理空格分离
+				const normalizedItems = normalizeSpaces(romanSegments);
+
+				// 为每个分段项创建 span
+				for (const item of normalizedItems) {
+					if (item.type === "space") {
+						// 空格直接插入 &nbsp; 文本
+						romanWordEl.insertAdjacentHTML("beforeend", "&nbsp;".repeat(item.content.length));
+					} else {
+						// 分段内容作为 span
+						const seg = item.segment;
+						const romanPartSpan = document.createElement("span");
+						romanPartSpan.innerText =
+							seg.romaji.length > 0 ? seg.romaji : "\u00A0";
+						romanPartSpan.dataset.startTime = String(seg.startTime);
+						romanPartSpan.dataset.endTime = String(seg.endTime);
+						romanPartSpan.dataset.isRomanSegment = "true";
+						romanWordEl.appendChild(romanPartSpan);
+					}
+				}
+			} else {
+				// 回退到不分割方案
+				const romanWordSpan = document.createElement("span");
+				romanWordSpan.innerText = romanWord.length > 0 ? romanWord : "\u00A0";
+				romanWordEl.appendChild(romanWordSpan);
+			}
+
 			wordContentEl.appendChild(romanWordEl);
 		}
 
@@ -761,9 +807,42 @@ export class LyricLineEl extends LyricLineBase {
 			if (hasRomanLine) {
 				const romanWordEl = document.createElement("div");
 				romanWordEl.classList.add(styles.romanWord);
-				const romanWordSpan = document.createElement("span");
-				romanWordSpan.innerText = romanWord.length > 0 ? romanWord : "\u00A0";
-				romanWordEl.appendChild(romanWordSpan);
+
+				// 尝试按照 ruby 分段 roman
+				const rubySegments = this.getRubySegments(word);
+				const romanSegments =
+					rubySegments.length > 0
+						? segmentRomanByRuby(word.romanWord ?? "", rubySegments)
+						: null;
+
+				if (romanSegments && romanSegments.length > 0) {
+					// 处理空格分离
+					const normalizedItems = normalizeSpaces(romanSegments);
+
+						// 为每个分段项创建 span
+					for (const item of normalizedItems) {
+						if (item.type === "space") {
+							// 空格直接插入 &nbsp; 文本
+							romanWordEl.insertAdjacentHTML("beforeend", "&nbsp;".repeat(item.content.length));
+						} else {
+							// 分段内容作为 span
+							const seg = item.segment;
+							const romanPartSpan = document.createElement("span");
+							romanPartSpan.innerText =
+								seg.romaji.length > 0 ? seg.romaji : "\u00A0";
+							romanPartSpan.dataset.startTime = String(seg.startTime);
+							romanPartSpan.dataset.endTime = String(seg.endTime);
+							romanPartSpan.dataset.isRomanSegment = "true";
+							romanWordEl.appendChild(romanPartSpan);
+						}
+					}
+				} else {
+					// 回退到不分割方案
+					const romanWordSpan = document.createElement("span");
+					romanWordSpan.innerText = romanWord.length > 0 ? romanWord : "\u00A0";
+					romanWordEl.appendChild(romanWordSpan);
+				}
+
 				wordContentEl.appendChild(romanWordEl);
 			}
 
@@ -1137,8 +1216,8 @@ export class LyricLineEl extends LyricLineBase {
 			const baseTextEl = wordEl.querySelector("div:first-child") as HTMLDivElement | null;
 			if (!baseTextEl) return;
 
-			// 获取 romanWord 内部的 span（如果有）
-			const romanWordSpan = wordEl.querySelector(`.${styles.romanWord} > span`) as HTMLSpanElement | null;
+			// 获取 romanWord 容器
+			const romanWordEl = wordEl.querySelector(`.${styles.romanWord}`) as HTMLDivElement | null;
 
 			// 为包裹原文的 div 创建动画
 			this.applyMaskAnimationToElement(
@@ -1151,17 +1230,37 @@ export class LyricLineEl extends LyricLineBase {
 				`fade-word-base-${word.word}-${index}`,
 			);
 
-			// 为 romanWord 内部的 span 创建动画（如果存在）
-			if (romanWordSpan) {
-				this.applyMaskAnimationToElement(
-					romanWordSpan as unknown as HTMLDivElement,
-					word.startTime,
-					word.endTime,
-					totalFadeDuration,
-					fadeWidth,
-					word,
-					`fade-word-roman-${word.word}-${index}`,
-				);
+			// 处理 roman 动画
+			if (romanWordEl) {
+				// 使用 roman 容器自身的高度计算 fadeWidth
+				const romanFadeWidth = romanWordEl.clientHeight * this.lyricPlayer.getWordFadeWidth();
+
+				// 检查是否有分段的 roman
+				const romanSegments = romanWordEl.querySelectorAll('span[data-is-roman-segment="true"]');
+				if (romanSegments.length > 0) {
+					// 使用分段动画
+					this.applyMaskAnimationToRomanContainer(
+						romanWordEl,
+						totalFadeDuration,
+						romanFadeWidth,
+						word,
+						`fade-roman-container-${index}`,
+					);
+				} else {
+					// 获取 romanWord 内部的单个 span
+					const romanWordSpan = romanWordEl.querySelector("span") as HTMLSpanElement | null;
+					if (romanWordSpan) {
+						this.applyMaskAnimationToElement(
+							romanWordSpan as unknown as HTMLDivElement,
+							word.startTime,
+							word.endTime,
+							totalFadeDuration,
+							romanFadeWidth,
+							word,
+							`fade-word-roman-${word.word}-${index}`,
+						);
+					}
+				}
 			}
 		}
 	}
@@ -1182,11 +1281,14 @@ export class LyricLineEl extends LyricLineBase {
 		// 获取所有 wordBody 下的子元素（每个子元素代表一个单词）
 		const wordSpans = Array.from(wordBodyEl.children) as HTMLSpanElement[];
 
+		// 使用 ruby 容器自身的高度计算 fadeWidth
+		const rubyFadeWidth = rubyWordEl.clientHeight * this.lyricPlayer.getWordFadeWidth();
+
 		// 为 rubyWord 父节点创建单个动画（替代为每个字符创建动画）
 		this.applyMaskAnimationToRubyContainer(
 			rubyWordEl,
 			totalFadeDuration,
-			fadeWidth,
+			rubyFadeWidth,
 			word,
 			`fade-ruby-container-${index}`,
 		);
@@ -1196,8 +1298,8 @@ export class LyricLineEl extends LyricLineBase {
 			const wordSpan = wordSpans[i];
 			// 获取原文 div（第一个子 div）
 			const baseTextEl = wordSpan.querySelector("div:first-child") as HTMLDivElement | null;
-			// 获取 romanWord 内部的 span
-			const romanWordSpan = wordSpan.querySelector(`.${styles.romanWord} > span`) as HTMLSpanElement | null;
+			// 获取 romanWord 容器
+			const romanWordEl = wordSpan.querySelector(`.${styles.romanWord}`) as HTMLDivElement | null;
 
 			// 从 dataset 获取时间，或使用默认时间
 			const startTime = Number(wordSpan.dataset.startTime || word.startTime);
@@ -1215,16 +1317,34 @@ export class LyricLineEl extends LyricLineBase {
 				);
 			}
 
-			if (romanWordSpan) {
-				this.applyMaskAnimation(
-					romanWordSpan as unknown as HTMLDivElement,
-					startTime,
-					endTime,
-					totalFadeDuration,
-					fadeWidth,
-					word,
-					`fade-word-roman-${index}-${i}`,
-				);
+			// 处理 roman 动画
+			if (romanWordEl) {
+				// 检查是否有分段的 roman
+				const romanSegments = romanWordEl.querySelectorAll('span[data-is-roman-segment="true"]');
+				if (romanSegments.length > 0) {
+					// 使用分段动画
+					this.applyMaskAnimationToRomanContainer(
+						romanWordEl,
+						totalFadeDuration,
+						fadeWidth,
+						word,
+						`fade-roman-container-${index}-${i}`,
+					);
+				} else {
+					// 获取 romanWord 内部的单个 span
+					const romanWordSpan = romanWordEl.querySelector("span") as HTMLSpanElement | null;
+					if (romanWordSpan) {
+						this.applyMaskAnimation(
+							romanWordSpan as unknown as HTMLDivElement,
+							startTime,
+							endTime,
+							totalFadeDuration,
+							fadeWidth,
+							word,
+							`fade-word-roman-${index}-${i}`,
+						);
+					}
+				}
 			}
 		}
 	}
@@ -1274,13 +1394,45 @@ export class LyricLineEl extends LyricLineBase {
 		const minOffset = -(containerWidth + fadeWidth);
 		const clampOffset = (x: number) => Math.max(minOffset, Math.min(0, x));
 
-		let curPos = -containerWidth - fadeWidth;
+		// 计算每个字符的累积偏移量
+		let currentOffset = 0;
+		const charOffsets = charInfos.map((charInfo) => {
+			const offset = currentOffset;
+			currentOffset += charInfo.width;
+			return offset;
+		});
+
+		// 预计算每个字符结束时的目标遮罩位置
+		// 目标：让当前字符的右边缘与渐变中间对齐
+		const targetPositions = charInfos.map((charInfo, i) => {
+			const isFirst = i === 0;
+			const isLast = i === charInfos.length - 1;
+			const offset = charOffsets[i];
+
+			// 基础位置：让当前字符右边缘对齐到遮罩渐变中间
+			// 遮罩左边缘位置 = -(容器宽度) + 当前字符右边缘位置 + 渐变宽度/2
+			let targetPos = -containerWidth + offset + charInfo.width + fadeWidth / 2;
+
+			// 第一个字符：额外考虑渐变宽度的一半（开始时完全隐藏）
+			if (isFirst) {
+				targetPos -= fadeWidth / 2;
+			}
+
+			// 最后一个字符：确保完全显示
+			if (isLast) {
+				targetPos = Math.min(targetPos, 0);
+			}
+
+			return clampOffset(targetPos);
+		});
+
+		let curPos = minOffset;
 		let timeOffset = 0;
 		const frames: Keyframe[] = [];
 
 		const pushFrame = () => {
 			const time = Math.max(0, Math.min(1, timeOffset));
-			const value = `${clampOffset(curPos)}px 0`;
+			const value = `${curPos}px 0`;
 			frames.push({ offset: time, maskPosition: value });
 		};
 
@@ -1300,10 +1452,8 @@ export class LyricLineEl extends LyricLineBase {
 				pushFrame();
 			}
 
-			// 段2：字符显示期间，移动遮罩
-			// 移动距离 = 当前字符宽度 + 渐变宽度调整
-			const moveDistance = charInfo.width + (i === 0 ? fadeWidth * 1.5 : fadeWidth * 0.5);
-			curPos += moveDistance;
+			// 段2：字符显示期间，移动到预计算的目标位置
+			curPos = targetPositions[i];
 
 			const charDuration = charInfo.endTime - charInfo.startTime;
 			timeOffset += charDuration / totalFadeDuration;
@@ -1329,6 +1479,167 @@ export class LyricLineEl extends LyricLineBase {
 		} catch (err) {
 			console.warn("应用 Ruby 容器渐变动画发生错误", frames, totalFadeDuration, err);
 		}
+	}
+
+	/**
+	 * 为 Roman 容器创建单个遮罩动画
+	 * 通过分段关键帧实现逐段显示效果，但只使用一个 Animation 对象
+	 */
+	private applyMaskAnimationToRomanContainer(
+		containerEl: HTMLDivElement,
+		totalFadeDuration: number,
+		fadeWidth: number,
+		word: RealWord,
+		animationId: string,
+	) {
+		// 获取所有子节点（包括分段 span 和空格文本节点）
+		const children = Array.from(containerEl.childNodes);
+
+		// 构建分段信息列表，包含每个分段的位置和宽度
+		// 位置是相对于容器左侧的偏移量
+		let currentOffset = 0;
+		const segmentInfos: {
+			startTime: number;
+			endTime: number;
+			width: number;
+			offset: number;
+		}[] = [];
+
+		for (const child of children) {
+			if (child.nodeType === Node.ELEMENT_NODE) {
+				const el = child as HTMLSpanElement;
+				if (el.getAttribute("data-is-roman-segment") === "true") {
+					segmentInfos.push({
+						startTime: Number(el.dataset.startTime || word.startTime),
+						endTime: Number(el.dataset.endTime || word.endTime),
+						width: el.clientWidth,
+						offset: currentOffset,
+					});
+				}
+				currentOffset += (child as HTMLElement).clientWidth || 0;
+			} else if (child.nodeType === Node.TEXT_NODE) {
+				// 文本节点（如 &nbsp;），计算其宽度
+				const textWidth = this.getTextWidth(child.textContent || "", containerEl);
+				currentOffset += textWidth;
+			}
+		}
+
+		if (segmentInfos.length === 0) return;
+
+		const containerWidth = containerEl.clientWidth;
+
+		const [maskImage, totalAspect] = generateFadeGradient(
+			fadeWidth / Math.max(1, containerWidth),
+		);
+		const totalAspectStr = `${totalAspect * 100}% 100%`;
+
+		// 应用遮罩样式到父节点
+		if (this.lyricPlayer.supportMaskImage) {
+			containerEl.style.maskImage = maskImage;
+			containerEl.style.maskRepeat = "no-repeat";
+			containerEl.style.maskOrigin = "left";
+			containerEl.style.maskSize = totalAspectStr;
+		} else {
+			containerEl.style.webkitMaskImage = maskImage;
+			containerEl.style.webkitMaskRepeat = "no-repeat";
+			containerEl.style.webkitMaskOrigin = "left";
+			containerEl.style.webkitMaskSize = totalAspectStr;
+		}
+
+		const minOffset = -(containerWidth + fadeWidth);
+		const clampOffset = (x: number) => Math.max(minOffset, Math.min(0, x));
+
+		// 预计算每个分段结束时的目标遮罩位置
+		// 目标：让当前分段的右边缘与渐变中间对齐
+		const targetPositions = segmentInfos.map((segInfo, i) => {
+			const isFirst = i === 0;
+			const isLast = i === segmentInfos.length - 1;
+
+			// 基础位置：让当前分段右边缘对齐到遮罩渐变中间
+			// 遮罩左边缘位置 = -(容器宽度) + 当前分段右边缘位置 + 渐变宽度/2
+			let targetPos = -containerWidth + segInfo.offset + segInfo.width + fadeWidth / 2;
+
+			// 第一个分段：额外考虑渐变宽度的一半（开始时完全隐藏）
+			if (isFirst) {
+				targetPos -= fadeWidth / 2;
+			}
+
+			// 最后一个分段：确保完全显示
+			if (isLast) {
+				targetPos = Math.min(targetPos, 0);
+			}
+
+			return clampOffset(targetPos);
+		});
+
+		let curPos = minOffset;
+		let timeOffset = 0;
+		const frames: Keyframe[] = [];
+
+		const pushFrame = () => {
+			const time = Math.max(0, Math.min(1, timeOffset));
+			const value = `${curPos}px 0`;
+			frames.push({ offset: time, maskPosition: value });
+		};
+
+		// 初始帧（全部隐藏）
+		pushFrame();
+
+		// 按时间顺序为每个分段创建关键帧段
+		let lastTimeStamp = 0;
+		segmentInfos.forEach((segInfo, i) => {
+			const segStartStamp = segInfo.startTime - this.lyricLine.startTime;
+			const segEndStamp = segInfo.endTime - this.lyricLine.startTime;
+
+			// 段1：等待当前分段开始（停顿阶段）
+			const waitDuration = segStartStamp - lastTimeStamp;
+			if (waitDuration > 0) {
+				timeOffset += waitDuration / totalFadeDuration;
+				pushFrame();
+			}
+
+			// 段2：分段显示期间，移动到预计算的目标位置
+			curPos = targetPositions[i];
+
+			const segDuration = segInfo.endTime - segInfo.startTime;
+			timeOffset += segDuration / totalFadeDuration;
+			pushFrame();
+
+			lastTimeStamp = segEndStamp;
+		});
+
+		// 保持显示到结束
+		if (timeOffset < 1) {
+			timeOffset = 1;
+			pushFrame();
+		}
+
+		try {
+			const ani = containerEl.animate(frames, {
+				duration: totalFadeDuration || 1,
+				id: animationId,
+				fill: "both",
+			});
+			ani.pause();
+			word.maskAnimations.push(ani);
+		} catch (err) {
+			console.warn("应用 Roman 容器渐变动画发生错误", frames, totalFadeDuration, err);
+		}
+	}
+
+	/**
+	 * 获取文本在指定元素样式下的宽度
+	 */
+	private getTextWidth(text: string, container: HTMLElement): number {
+		const canvas = document.createElement("canvas");
+		const context = canvas.getContext("2d");
+		if (!context) return 0;
+
+		const style = window.getComputedStyle(container);
+		const font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+		context.font = font;
+
+		return context.measureText(text).width;
 	}
 
 	/**
