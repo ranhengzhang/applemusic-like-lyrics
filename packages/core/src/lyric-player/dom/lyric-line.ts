@@ -1403,24 +1403,19 @@ export class LyricLineEl extends LyricLineBase {
 		});
 
 		// 预计算每个字符结束时的目标遮罩位置
-		// 目标：让当前字符的右边缘与渐变中间对齐
+		// 新规则：前 n-1 个字符不考虑渐变宽度，第 n 个字符考虑完整渐变宽度
 		const targetPositions = charInfos.map((charInfo, i) => {
-			const isFirst = i === 0;
 			const isLast = i === charInfos.length - 1;
 			const offset = charOffsets[i];
 
-			// 基础位置：让当前字符右边缘对齐到遮罩渐变中间
-			// 遮罩左边缘位置 = -(容器宽度) + 当前字符右边缘位置 + 渐变宽度/2
-			let targetPos = -containerWidth + offset + charInfo.width + fadeWidth / 2;
-
-			// 第一个字符：额外考虑渐变宽度的一半（开始时完全隐藏）
-			if (isFirst) {
-				targetPos -= fadeWidth / 2;
-			}
-
-			// 最后一个字符：确保完全显示
+			let targetPos: number;
 			if (isLast) {
-				targetPos = Math.min(targetPos, 0);
+				// 最后一个字符：完全显示
+				targetPos = 0;
+			} else {
+				// 前 n-1 个字符：让当前字符右边缘对齐到容器右边缘
+				// 即显示到当前字符结束位置
+				targetPos = -containerWidth + offset + charInfo.width;
 			}
 
 			return clampOffset(targetPos);
@@ -1482,164 +1477,102 @@ export class LyricLineEl extends LyricLineBase {
 	}
 
 	/**
-	 * 为 Roman 容器创建单个遮罩动画
-	 * 通过分段关键帧实现逐段显示效果，但只使用一个 Animation 对象
+	 * 为 Roman 容器的每个分段创建独立遮罩动画
+	 * 每个分段 span 有自己的 Animation 对象
 	 */
 	private applyMaskAnimationToRomanContainer(
 		containerEl: HTMLDivElement,
 		totalFadeDuration: number,
-		fadeWidth: number,
+		_fadeWidth: number,
 		word: RealWord,
 		animationId: string,
 	) {
-		// 获取所有子节点（包括分段 span 和空格文本节点）
-		const children = Array.from(containerEl.childNodes);
-
-		// 构建分段信息列表，包含每个分段的位置和宽度
-		// 位置是相对于容器左侧的偏移量
-		let currentOffset = 0;
-		const segmentInfos: {
-			startTime: number;
-			endTime: number;
-			width: number;
-			offset: number;
-		}[] = [];
-
-		for (const child of children) {
-			if (child.nodeType === Node.ELEMENT_NODE) {
-				const el = child as HTMLSpanElement;
-				if (el.getAttribute("data-is-roman-segment") === "true") {
-					segmentInfos.push({
-						startTime: Number(el.dataset.startTime || word.startTime),
-						endTime: Number(el.dataset.endTime || word.endTime),
-						width: el.clientWidth,
-						offset: currentOffset,
-					});
-				}
-				currentOffset += (child as HTMLElement).clientWidth || 0;
-			} else if (child.nodeType === Node.TEXT_NODE) {
-				// 文本节点（如 &nbsp;），计算其宽度
-				const textWidth = this.getTextWidth(child.textContent || "", containerEl);
-				currentOffset += textWidth;
-			}
-		}
-
-		if (segmentInfos.length === 0) return;
-
-		const containerWidth = containerEl.clientWidth;
-
-		const [maskImage, totalAspect] = generateFadeGradient(
-			fadeWidth / Math.max(1, containerWidth),
+		// 获取所有分段 span
+		const segmentSpans = Array.from(containerEl.children).filter(
+			(el): el is HTMLSpanElement =>
+				el.tagName === "SPAN" && el.getAttribute("data-is-roman-segment") === "true",
 		);
-		const totalAspectStr = `${totalAspect * 100}% 100%`;
 
-		// 应用遮罩样式到父节点
-		if (this.lyricPlayer.supportMaskImage) {
-			containerEl.style.maskImage = maskImage;
-			containerEl.style.maskRepeat = "no-repeat";
-			containerEl.style.maskOrigin = "left";
-			containerEl.style.maskSize = totalAspectStr;
-		} else {
-			containerEl.style.webkitMaskImage = maskImage;
-			containerEl.style.webkitMaskRepeat = "no-repeat";
-			containerEl.style.webkitMaskOrigin = "left";
-			containerEl.style.webkitMaskSize = totalAspectStr;
-		}
+		if (segmentSpans.length === 0) return;
 
-		const minOffset = -(containerWidth + fadeWidth);
-		const clampOffset = (x: number) => Math.max(minOffset, Math.min(0, x));
+		// 为每个分段创建独立动画
+		segmentSpans.forEach((span, i) => {
+			const startTime = Number(span.dataset.startTime || word.startTime);
+			const endTime = Number(span.dataset.endTime || word.endTime);
+			const spanWidth = span.clientWidth;
 
-		// 预计算每个分段结束时的目标遮罩位置
-		// 目标：让当前分段的右边缘与渐变中间对齐
-		const targetPositions = segmentInfos.map((segInfo, i) => {
-			const isFirst = i === 0;
-			const isLast = i === segmentInfos.length - 1;
+			// 使用分段自身的高度计算 fadeWidth
+			const spanFadeWidth = span.clientHeight * this.lyricPlayer.getWordFadeWidth();
 
-			// 基础位置：让当前分段右边缘对齐到遮罩渐变中间
-			// 遮罩左边缘位置 = -(容器宽度) + 当前分段右边缘位置 + 渐变宽度/2
-			let targetPos = -containerWidth + segInfo.offset + segInfo.width + fadeWidth / 2;
+			// 创建遮罩渐变
+			const [maskImage, totalAspect] = generateFadeGradient(
+				spanFadeWidth / Math.max(1, spanWidth),
+			);
+			const totalAspectStr = `${totalAspect * 100}% 100%`;
 
-			// 第一个分段：额外考虑渐变宽度的一半（开始时完全隐藏）
-			if (isFirst) {
-				targetPos -= fadeWidth / 2;
+			// 应用遮罩样式到分段
+			if (this.lyricPlayer.supportMaskImage) {
+				span.style.maskImage = maskImage;
+				span.style.maskRepeat = "no-repeat";
+				span.style.maskOrigin = "left";
+				span.style.maskSize = totalAspectStr;
+			} else {
+				span.style.webkitMaskImage = maskImage;
+				span.style.webkitMaskRepeat = "no-repeat";
+				span.style.webkitMaskOrigin = "left";
+				span.style.webkitMaskSize = totalAspectStr;
 			}
 
-			// 最后一个分段：确保完全显示
-			if (isLast) {
-				targetPos = Math.min(targetPos, 0);
-			}
+			// 创建动画关键帧
+			const minOffset = -(spanWidth + spanFadeWidth);
+			const clampOffset = (x: number) => Math.max(minOffset, Math.min(0, x));
 
-			return clampOffset(targetPos);
-		});
+			const frames: Keyframe[] = [];
+			const segStartStamp = startTime - this.lyricLine.startTime;
+			const segEndStamp = endTime - this.lyricLine.startTime;
 
-		let curPos = minOffset;
-		let timeOffset = 0;
-		const frames: Keyframe[] = [];
-
-		const pushFrame = () => {
-			const time = Math.max(0, Math.min(1, timeOffset));
-			const value = `${curPos}px 0`;
-			frames.push({ offset: time, maskPosition: value });
-		};
-
-		// 初始帧（全部隐藏）
-		pushFrame();
-
-		// 按时间顺序为每个分段创建关键帧段
-		let lastTimeStamp = 0;
-		segmentInfos.forEach((segInfo, i) => {
-			const segStartStamp = segInfo.startTime - this.lyricLine.startTime;
-			const segEndStamp = segInfo.endTime - this.lyricLine.startTime;
-
-			// 段1：等待当前分段开始（停顿阶段）
-			const waitDuration = segStartStamp - lastTimeStamp;
-			if (waitDuration > 0) {
-				timeOffset += waitDuration / totalFadeDuration;
-				pushFrame();
-			}
-
-			// 段2：分段显示期间，移动到预计算的目标位置
-			curPos = targetPositions[i];
-
-			const segDuration = segInfo.endTime - segInfo.startTime;
-			timeOffset += segDuration / totalFadeDuration;
-			pushFrame();
-
-			lastTimeStamp = segEndStamp;
-		});
-
-		// 保持显示到结束
-		if (timeOffset < 1) {
-			timeOffset = 1;
-			pushFrame();
-		}
-
-		try {
-			const ani = containerEl.animate(frames, {
-				duration: totalFadeDuration || 1,
-				id: animationId,
-				fill: "both",
+			// 初始状态（完全隐藏）
+			frames.push({
+				offset: 0,
+				maskPosition: `${clampOffset(minOffset)}px 0`,
 			});
-			ani.pause();
-			word.maskAnimations.push(ani);
-		} catch (err) {
-			console.warn("应用 Roman 容器渐变动画发生错误", frames, totalFadeDuration, err);
-		}
-	}
 
-	/**
-	 * 获取文本在指定元素样式下的宽度
-	 */
-	private getTextWidth(text: string, container: HTMLElement): number {
-		const canvas = document.createElement("canvas");
-		const context = canvas.getContext("2d");
-		if (!context) return 0;
+			// 等待阶段（保持隐藏）
+			const startOffset = Math.max(0, segStartStamp / totalFadeDuration);
+			if (startOffset > 0) {
+				frames.push({
+					offset: startOffset,
+					maskPosition: `${clampOffset(minOffset)}px 0`,
+				});
+			}
 
-		const style = window.getComputedStyle(container);
-		const font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-		context.font = font;
+			// 显示阶段（移动遮罩到完全显示）
+			const endOffset = Math.min(1, segEndStamp / totalFadeDuration);
+			frames.push({
+				offset: endOffset,
+				maskPosition: `${clampOffset(0)}px 0`,
+			});
 
-		return context.measureText(text).width;
+			// 保持显示到结束
+			if (endOffset < 1) {
+				frames.push({
+					offset: 1,
+					maskPosition: `${clampOffset(0)}px 0`,
+				});
+			}
+
+			try {
+				const ani = span.animate(frames, {
+					duration: totalFadeDuration || 1,
+					id: `${animationId}-${i}`,
+					fill: "both",
+				});
+				ani.pause();
+				word.maskAnimations.push(ani);
+			} catch (err) {
+				console.warn("应用 Roman 分段动画发生错误", frames, totalFadeDuration, err);
+			}
+		});
 	}
 
 	/**
