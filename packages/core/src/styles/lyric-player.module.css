@@ -122,11 +122,17 @@
 		display: flex;
 		padding-inline-end: 0.3em;
 		font-family: var(--amll-lp-roman-font, inherit);
+
+		/* 支持分段的 roman 显示 */
+		& > span {
+			display: inline-block;
+			white-space: pre;
+		}
 	}
 
 	.rubyWord {
 		font-size: 0.5em;
-		line-height: 1em;
+		line-height: 1.5em;
 		display: flex;
 		justify-content: center;
 		min-height: 1em;
@@ -134,6 +140,12 @@
 
 		&:not(:empty) + .wordBody {
 			flex-direction: row;
+
+			div {
+				display: flex;
+				flex-direction: row;
+				align-items: center;
+			}
 
 			span {
 				display: flex;
