@@ -102,7 +102,7 @@ function syncMainAndBackgroundLines(lines: LyricLine[]) {
 /**
  * 清洗非刻意的重叠
  *
- * 如果重叠大于100ms 且 重叠超过下一行时长的10%，则截断
+ * 如果重叠小于等于100ms 且 重叠不超过下一行时长的10%，则截断
  */
 function cleanUnintentionalOverlaps(lines: LyricLine[]) {
 	for (let i = 0; i < lines.length - 1; i++) {
@@ -122,9 +122,10 @@ function cleanUnintentionalOverlaps(lines: LyricLine[]) {
 				const nextDuration = nextLine.endTime - nextLine.startTime;
 				const percentageThreshold = nextDuration * 0.1;
 
-				// 重叠大于100ms 且 重叠超过下一行时长的10%
+				// 重叠大于100ms 或 重叠超过下一行时长的10% → 同时亮起（保留重叠）
+				// 否则 → 直接切换（截断上一行）
 				const isIntentionalOverlap =
-					overlap > 100 && overlap > percentageThreshold;
+					overlap > 100 || overlap > percentageThreshold;
 
 				if (!isIntentionalOverlap) {
 					line.endTime = nextLine.startTime;
