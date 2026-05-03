@@ -54,20 +54,10 @@ function generateFadeGradient(
 	const totalAspect = 2 + width + padding;
 	const widthInTotal = width / totalAspect;
 	const leftPos = (1 - widthInTotal) / 2;
-
-	// 创建阶梯式渐变：开始更深，结束更浅
-	// 使用多段渐变实现阶梯效果
-	const step1 = leftPos; // 纯 bright 结束位置
-	const step2 = leftPos + widthInTotal * 0.3; // 深色调过渡点
-	const step3 = leftPos + widthInTotal * 0.7; // 浅色调过渡点
-	const step4 = leftPos + widthInTotal; // 纯 dark 开始位置
-
-	// 解析颜色，创建更深的开始色和更浅的结束色
-	const deepColor = bright.replace(/[\d.]+\)$/, "1.0)"); // 完全不透明的 bright
-	const lightColor = dark.replace(/[\d.]+\)$/, "0.3)"); // 更透明的 dark
-
 	return [
-		`linear-gradient(to right,${bright} ${step1 * 100}%,${deepColor} ${step2 * 100}%,${lightColor} ${step3 * 100}%,${dark} ${step4 * 100}%)`,
+		`linear-gradient(to right,${bright} ${leftPos * 100}%,${dark} ${
+			(leftPos + widthInTotal) * 100
+		}%)`,
 		totalAspect,
 	];
 }
