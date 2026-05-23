@@ -94,14 +94,20 @@ export class CanvasLyricLine extends LyricLineBase {
 		lctx.scale(devicePixelRatio, devicePixelRatio);
 		lctx.fillStyle = "white";
 		lctx.textBaseline = "top";
-		lctx.textAlign = "left";
+		// RTL 行使用右对齐，其他使用左对齐
+		const isRtl = this.line.isRtl;
+		lctx.textAlign = isRtl ? "right" : "left";
 		lctx.font = `${this.player.baseFontSize}px ${this.player.baseFontFamily}`;
 		let lineIndex = 0;
 		for (const word of this.layoutWords) {
 			for (const layout of word) {
+				// RTL 行从右侧绘制
+				const x = isRtl
+					? this.lineCanvas.width / devicePixelRatio - layout.x
+					: layout.x;
 				lctx.fillText(
 					layout.text,
-					layout.x,
+					x,
 					layout.lineIndex *
 						this.player.baseFontSize *
 						this.player.baseLineHeight,
@@ -115,9 +121,13 @@ export class CanvasLyricLine extends LyricLineBase {
 		lctx.globalAlpha = 0.5;
 		lineIndex = 0;
 		for (const layout of this.translatedLayoutWords) {
+			// RTL 行从右侧绘制
+			const x = isRtl
+				? this.lineCanvas.width / devicePixelRatio - layout.x
+				: layout.x;
 			lctx.fillText(
 				layout.text,
-				layout.x,
+				x,
 				layout.lineIndex *
 					this.player.baseFontSize *
 					this.player.baseLineHeight,
@@ -126,9 +136,13 @@ export class CanvasLyricLine extends LyricLineBase {
 		}
 		lctx.translate(0, (lineIndex + 1) * this.player.baseFontSize);
 		for (const layout of this.romanLayoutWords) {
+			// RTL 行从右侧绘制
+			const x = isRtl
+				? this.lineCanvas.width / devicePixelRatio - layout.x
+				: layout.x;
 			lctx.fillText(
 				layout.text,
-				layout.x,
+				x,
 				layout.lineIndex *
 					this.player.baseFontSize *
 					this.player.baseLineHeight,
