@@ -122,6 +122,38 @@
 			text-align: left;
 			transform: scaleX(-1);
 		}
+		
+		.emphasizeWrapper {
+			.romanWord {
+				padding-inline-srart: 0em;
+				padding-inline-end: 0.3em;
+			}
+
+			* {
+				text-align: left;
+				flex-direction: row;
+			}
+		}
+	}
+
+	&:not(.lyricDuetLine){
+		/* 子行（翻译、音译）翻转回来 */
+		.lyricSubLine {
+			text-align: right;
+			transform: scaleX(-1);
+		}
+
+		.emphasizeWrapper {
+			.romanWord {
+				padding-inline-end: 0em;
+				padding-inline-start: 0.3em;
+			}
+
+			* {
+				text-align: right;
+				flex-direction: row-reverse;
+			}
+		}
 	}
 
 	/* 音节内容翻转回来，使文字显示正常（应用到内部的 span 标签） */
@@ -132,12 +164,6 @@
 		display: inline-block;
 		transform: scaleX(-1) !important;
 		}
-	}
-
-	/* 子行（翻译、音译）翻转回来 */
-	.lyricSubLine {
-		text-align: right;
-		transform: scaleX(-1);
 	}
 }
 
