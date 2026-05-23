@@ -73,6 +73,8 @@ export interface LyricLine {
 	isBG: boolean;
 	/** 该行是否为对唱歌词行（即歌词行靠右对齐） */
 	isDuet: boolean;
+	/** 该行是否为从右到左（RTL）显示 */
+	isRtl?: boolean;
 }
 
 /**
