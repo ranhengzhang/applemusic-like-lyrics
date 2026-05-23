@@ -2,6 +2,11 @@
     给各个内部元素使用的样式
 */
 
+/* 标识设置了动画的元素 */
+.hasAnimation {
+	will-change: transform, mask-position, -webkit-mask-position;
+}
+
 /* 给每行歌词应用的样式 */
 .lyricLine {
 	position: absolute;
