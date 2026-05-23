@@ -567,6 +567,8 @@ export class LyricLineEl extends LyricLineBase {
 
 		// 总是创建字符级别的元素，用于字符级动画
 		const wordEl = document.createElement("div");
+		// 添加动画标识 class，因为字符级动画将应用在其子元素上
+		wordEl.classList.add(styles.hasAnimation);
 		for (const char of word.word.trim()) {
 			const charEl = document.createElement("span");
 			charEl.innerText = char;
@@ -600,21 +602,27 @@ export class LyricLineEl extends LyricLineBase {
 						// 空格直接插入 &nbsp; 文本
 						romanWordEl.insertAdjacentHTML("beforeend", "&nbsp;".repeat(item.content.length));
 					} else {
-						// 分段内容作为 span
+						// 分段内容作为 span（设置动画效果的标签）
 						const seg = item.segment;
 						const romanPartSpan = document.createElement("span");
-						romanPartSpan.innerText =
-							seg.romaji.length > 0 ? seg.romaji : "\u00A0";
 						romanPartSpan.dataset.startTime = String(seg.startTime);
 						romanPartSpan.dataset.endTime = String(seg.endTime);
 						romanPartSpan.dataset.isRomanSegment = "true";
+						// 嵌套一层 span 放置文本内容
+						const romanTextSpan = document.createElement("span");
+						romanTextSpan.innerText =
+							seg.romaji.length > 0 ? seg.romaji : "\u00A0";
+						romanPartSpan.appendChild(romanTextSpan);
 						romanWordEl.appendChild(romanPartSpan);
 					}
 				}
 			} else {
 				// 回退到不分割方案
 				const romanWordSpan = document.createElement("span");
-				romanWordSpan.innerText = romanWord.length > 0 ? romanWord : "\u00A0";
+				// 嵌套一层 span 放置文本内容
+				const romanTextSpan = document.createElement("span");
+				romanTextSpan.innerText = romanWord.length > 0 ? romanWord : "\u00A0";
+				romanWordSpan.appendChild(romanTextSpan);
 				romanWordEl.appendChild(romanWordSpan);
 			}
 
@@ -782,6 +790,8 @@ export class LyricLineEl extends LyricLineBase {
 
 			// 总是创建字符级别的元素，用于字符级动画
 			const wordEl = document.createElement("div");
+			// 添加动画标识 class，因为字符级动画将应用在其子元素上
+			wordEl.classList.add(styles.hasAnimation);
 			for (const char of word.word.trim()) {
 				const charEl = document.createElement("span");
 				charEl.innerText = char;
@@ -809,27 +819,33 @@ export class LyricLineEl extends LyricLineBase {
 					// 处理空格分离
 					const normalizedItems = normalizeSpaces(romanSegments);
 
-						// 为每个分段项创建 span
+					// 为每个分段项创建 span
 					for (const item of normalizedItems) {
 						if (item.type === "space") {
 							// 空格直接插入 &nbsp; 文本
 							romanWordEl.insertAdjacentHTML("beforeend", "&nbsp;".repeat(item.content.length));
 						} else {
-							// 分段内容作为 span
+							// 分段内容作为 span（设置动画效果的标签）
 							const seg = item.segment;
 							const romanPartSpan = document.createElement("span");
-							romanPartSpan.innerText =
-								seg.romaji.length > 0 ? seg.romaji : "\u00A0";
 							romanPartSpan.dataset.startTime = String(seg.startTime);
 							romanPartSpan.dataset.endTime = String(seg.endTime);
 							romanPartSpan.dataset.isRomanSegment = "true";
+							// 嵌套一层 span 放置文本内容
+							const romanTextSpan = document.createElement("span");
+							romanTextSpan.innerText =
+								seg.romaji.length > 0 ? seg.romaji : "\u00A0";
+							romanPartSpan.appendChild(romanTextSpan);
 							romanWordEl.appendChild(romanPartSpan);
 						}
 					}
 				} else {
 					// 回退到不分割方案
 					const romanWordSpan = document.createElement("span");
-					romanWordSpan.innerText = romanWord.length > 0 ? romanWord : "\u00A0";
+					// 嵌套一层 span 放置文本内容
+					const romanTextSpan = document.createElement("span");
+					romanTextSpan.innerText = romanWord.length > 0 ? romanWord : "\u00A0";
+					romanWordSpan.appendChild(romanTextSpan);
 					romanWordEl.appendChild(romanWordSpan);
 				}
 
@@ -1112,6 +1128,8 @@ export class LyricLineEl extends LyricLineBase {
 		word: RealWord,
 		animationId: string,
 	) {
+		// 添加动画标识 class
+		element.classList.add(styles.hasAnimation);
 		const wordWidth = element.clientWidth || 0;
 
 		const [maskImage, totalAspect] = generateFadeGradient(
@@ -1350,6 +1368,8 @@ export class LyricLineEl extends LyricLineBase {
 		word: RealWord,
 		animationId: string,
 	) {
+		// 添加动画标识 class
+		containerEl.classList.add(styles.hasAnimation);
 		// 获取所有 ruby 字符信息
 		const rubySpans = Array.from(containerEl.children) as HTMLSpanElement[];
 		if (rubySpans.length === 0) return;
@@ -1487,6 +1507,8 @@ export class LyricLineEl extends LyricLineBase {
 
 		// 为每个分段创建独立动画
 		segmentSpans.forEach((span, i) => {
+			// 添加动画标识 class
+			span.classList.add(styles.hasAnimation);
 			const startTime = Number(span.dataset.startTime || word.startTime);
 			const endTime = Number(span.dataset.endTime || word.endTime);
 			const spanWidth = span.clientWidth;
@@ -1577,6 +1599,8 @@ export class LyricLineEl extends LyricLineBase {
 		word: RealWord,
 		animationId: string,
 	) {
+		// 添加动画标识 class
+		element.classList.add(styles.hasAnimation);
 		const elementWidth = element.clientWidth || 0;
 		const elementPadding = 0; // 简化处理，没有额外的 padding
 

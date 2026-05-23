@@ -381,8 +381,11 @@ export class LyricLineEl extends LyricLineBase {
 
 		if (hasRomanLine) {
 			const romanWordEl = document.createElement("div");
-			romanWordEl.innerText = romanWord.length > 0 ? romanWord : "\u00A0";
 			romanWordEl.classList.add(styles.romanWord);
+			// 嵌套一层 span 放置文本内容
+			const romanTextSpan = document.createElement("span");
+			romanTextSpan.innerText = romanWord.length > 0 ? romanWord : "\u00A0";
+			romanWordEl.appendChild(romanTextSpan);
 			wordContainer.appendChild(romanWordEl);
 		}
 
