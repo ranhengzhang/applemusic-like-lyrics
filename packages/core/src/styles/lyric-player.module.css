@@ -103,6 +103,44 @@
 	transform-origin: right;
 }
 
+/* RTL 行样式 */
+.lyricRtlLine {
+	direction: rtl;
+	/* transform: scaleX(-1) !important; */
+
+	/* 普通 RTL 行：左对齐（翻转后显示为右对齐） */
+	text-align: left;
+	transform-origin: left;
+
+	/* 对唱 RTL 行：右对齐（翻转后显示为左对齐） */
+	&.lyricDuetLine {
+		text-align: right;
+		transform-origin: right;
+
+		/* 子行（翻译、音译）翻转回来 */
+		.lyricSubLine {
+			text-align: left;
+			transform: scaleX(-1);
+		}
+	}
+
+	/* 音节内容翻转回来，使文字显示正常（应用到内部的 span 标签） */
+	.hasAnimation{
+		transform: scaleX(-1) !important;
+		
+		& > span {
+		display: inline-block;
+		transform: scaleX(-1) !important;
+		}
+	}
+
+	/* 子行（翻译、音译）翻转回来 */
+	.lyricSubLine {
+		text-align: right;
+		transform: scaleX(-1);
+	}
+}
+
 .lyricMainLine {
 	transition: opacity 0.3s 0.1s;
 	margin: -1em;
