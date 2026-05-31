@@ -47,37 +47,38 @@ function resetLineTimestamps(lines: LyricLine[]) {
 
 /**
  * 把多行背景人声转换为单行背景人声 + 主歌词行的形式
+ *
+ * 注意：此函数现在保留所有背景行，以支持多背景行功能
  */
-function convertExcessiveBackgroundLines(lines: LyricLine[]) {
-	let consecutiveBgCount = 0;
-
-	for (const line of lines) {
-		if (line.isBG) {
-			consecutiveBgCount++;
-			if (consecutiveBgCount > 1) {
-				line.isBG = false;
-			}
-		} else {
-			consecutiveBgCount = 0;
-		}
-	}
+function convertExcessiveBackgroundLines(_lines: LyricLine[]) {
+	// 多背景行功能已启用，不再合并背景行
+	// 所有背景行都会被保留
 }
 
 /**
  * 同步主歌词与背景人声的时间
  *
- * 取两者中最早的开始时间和最晚的结束时间，应用给双方
+ * 取主行和所有连续背景行中最早的开始时间和最晚的结束时间，应用给所有行
  */
 function syncMainAndBackgroundLines(lines: LyricLine[]) {
 	for (let i = lines.length - 1; i >= 0; i--) {
 		const line = lines[i];
 		if (line.isBG) continue;
 
-		const nextLine = lines[i + 1];
-		if (nextLine?.isBG) {
-			const allWords = [...line.words, ...nextLine.words].filter(
-				(w) => w.word.trim().length > 0,
-			);
+		// 收集所有连续的背景行
+		const bgLines: LyricLine[] = [];
+		let j = i + 1;
+		while (j < lines.length && lines[j].isBG) {
+			bgLines.push(lines[j]);
+			j++;
+		}
+
+		if (bgLines.length > 0) {
+			// 收集所有单词（主行 + 所有背景行）
+			const allWords = [
+				...line.words,
+				...bgLines.flatMap((bgLine) => bgLine.words),
+			].filter((w) => w.word.trim().length > 0);
 
 			if (allWords.length > 0) {
 				const minStart = Math.min(...allWords.map((w) => w.startTime));
@@ -86,14 +87,23 @@ function syncMainAndBackgroundLines(lines: LyricLine[]) {
 				const finalStart = Math.min(
 					minStart,
 					line.startTime,
-					nextLine.startTime,
+					...bgLines.map((bgLine) => bgLine.startTime),
 				);
-				const finalEnd = Math.max(maxEnd, line.endTime, nextLine.endTime);
+				const finalEnd = Math.max(
+					maxEnd,
+					line.endTime,
+					...bgLines.map((bgLine) => bgLine.endTime),
+				);
 
+				// 同步时间到主行
 				line.startTime = finalStart;
 				line.endTime = finalEnd;
-				nextLine.startTime = finalStart;
-				nextLine.endTime = finalEnd;
+
+				// 同步时间到所有背景行
+				for (const bgLine of bgLines) {
+					bgLine.startTime = finalStart;
+					bgLine.endTime = finalEnd;
+				}
 			}
 		}
 	}

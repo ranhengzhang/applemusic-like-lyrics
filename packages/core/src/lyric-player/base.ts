@@ -615,22 +615,35 @@ export abstract class LyricPlayerBase
 			const line = this.processedLines[lastHotId];
 			if (line) {
 				if (line.isBG) continue;
-				const nextLine = this.processedLines[lastHotId + 1];
-				if (nextLine?.isBG) {
-					const nextMainLine = this.processedLines[lastHotId + 2];
-					const startTime = Math.min(line.startTime, nextLine?.startTime);
+
+				// 收集所有连续的背景行
+				const bgLineIds: number[] = [];
+				let bgId = lastHotId + 1;
+				while (bgId < this.processedLines.length && this.processedLines[bgId]?.isBG) {
+					bgLineIds.push(bgId);
+					bgId++;
+				}
+
+				if (bgLineIds.length > 0) {
+					const nextMainLine = this.processedLines[bgId];
+					const bgLines = bgLineIds.map(id => this.processedLines[id]);
+					const startTime = Math.min(line.startTime, ...bgLines.map(bg => bg.startTime));
 					const endTime = Math.min(
 						Math.max(line.endTime, nextMainLine?.startTime ?? Number.MAX_VALUE),
-						Math.max(line.endTime, nextLine?.endTime),
+						Math.max(line.endTime, ...bgLines.map(bg => bg.endTime)),
 					);
 					if (startTime > time || endTime <= time) {
 						this.hotLines.delete(lastHotId);
 						removedHotIds.add(lastHotId);
-						this.hotLines.delete(lastHotId + 1);
-						removedHotIds.add(lastHotId + 1);
+						for (const bgLineId of bgLineIds) {
+							this.hotLines.delete(bgLineId);
+							removedHotIds.add(bgLineId);
+							if (isSeek) {
+								this.currentLyricLineObjects[bgLineId]?.disable();
+							}
+						}
 						if (isSeek) {
 							this.currentLyricLineObjects[lastHotId]?.disable();
-							this.currentLyricLineObjects[lastHotId + 1]?.disable();
 						}
 					}
 				} else if (line.startTime > time || line.endTime <= time) {
@@ -660,14 +673,17 @@ export abstract class LyricPlayerBase
 						lineObj.enable();
 					}
 
-					if (arr[id + 1]?.getLine()?.isBG) {
-						this.hotLines.add(id + 1);
-						addedIds.add(id + 1);
+					// 添加所有连续的背景行
+					let bgId = id + 1;
+					while (bgId < arr.length && arr[bgId]?.getLine()?.isBG) {
+						this.hotLines.add(bgId);
+						addedIds.add(bgId);
 						if (isSeek) {
-							arr[id + 1].enable(time, this.isPlaying);
+							arr[bgId].enable(time, this.isPlaying);
 						} else {
-							arr[id + 1].enable();
+							arr[bgId].enable();
 						}
+						bgId++;
 					}
 				}
 			}
@@ -810,10 +826,15 @@ export abstract class LyricPlayerBase
 		for (let i = 0; i < this.currentLyricLineObjects.length; i++) {
 			const line = this.currentLyricLineObjects[i].getLine();
 			if (line.isBG && i > 0) {
-				const prevLine = this.currentLyricLineObjects[i - 1].getLine();
-				if (!prevLine.isBG) {
+				// 找到所属的主行（向前查找第一个非BG行）
+				let mainLineIndex = i - 1;
+				while (mainLineIndex >= 0 && this.currentLyricLineObjects[mainLineIndex].getLine().isBG) {
+					mainLineIndex--;
+				}
+				if (mainLineIndex >= 0) {
+					const mainLine = this.currentLyricLineObjects[mainLineIndex].getLine();
 					// 获取主行的第一个音节起始时间
-					const mainFirstWordStart = prevLine.words[0]?.startTime ?? prevLine.startTime;
+					const mainFirstWordStart = mainLine.words[0]?.startTime ?? mainLine.startTime;
 					// 获取 BG 行的起始时间
 					const bgStartTime = line.startTime;
 					// 如果 BG 行比主行第一个音节早 >1秒，则放在主行上方
@@ -928,24 +949,40 @@ export abstract class LyricPlayerBase
 
 			// 如果这行是 BG 行且需要放在主行上方，调整位置
 			if (line.isBG && bgAboveMain.has(i) && (isActive || !this.isPlaying)) {
-				// 获取主行的高度（前一行）
-				const mainLineHeight = this.lyricLinesSize.get(this.currentLyricLineObjects[i - 1])?.[1] ?? LINE_HEIGHT_FALLBACK;
-				// 获取 BG 行的高度
-				const bgLineHeight = this.lyricLinesSize.get(lineObj)?.[1] ?? LINE_HEIGHT_FALLBACK;
-				// BG 行向上偏移：主行高度 + BG 行高度（让 BG 行在主行上方）
-				linePos = curPos - mainLineHeight - bgLineHeight;
-				// 如果前一行（主行）后紧跟一个激活的BG行，主行已经向下偏移了 bgLineHeight
-				// 所以 BG 行也需要向下偏移 bgLineHeight，以保持相对位置正确
-				if (i > 0 && activeBgAboveMain.has(i)) {
-					linePos += bgLineHeight;
+				// 找到所属的主行索引
+				let mainLineIndex = i - 1;
+				while (mainLineIndex >= 0 && this.currentLyricLineObjects[mainLineIndex].getLine().isBG) {
+					mainLineIndex--;
+				}
+
+				if (mainLineIndex >= 0) {
+					// 获取主行的高度
+					const mainLineHeight = this.lyricLinesSize.get(this.currentLyricLineObjects[mainLineIndex])?.[1] ?? LINE_HEIGHT_FALLBACK;
+					// 获取 BG 行的高度
+					const bgLineHeight = this.lyricLinesSize.get(lineObj)?.[1] ?? LINE_HEIGHT_FALLBACK;
+
+					// 计算这个 BG 行在其所属主行的所有 BG 行中的索引
+					let bgIndexInGroup = 0;
+					for (let j = mainLineIndex + 1; j < i; j++) {
+						if (activeBgAboveMain.has(j)) bgIndexInGroup++;
+					}
+
+					// BG 行向上偏移：主行高度 + (BG索引+1) * BG行高度
+					linePos = curPos - mainLineHeight - (bgIndexInGroup + 1) * bgLineHeight;
 				}
 			}
 
-			// 如果这行是主行且后紧跟一个需要放在主行上方的激活BG行，
-			// 则主行需要向下移动，为BG行腾出空间
-			if (!line.isBG && activeBgAboveMain.has(i + 1)) {
-				const bgLineHeight = this.lyricLinesSize.get(this.currentLyricLineObjects[i + 1])?.[1] ?? LINE_HEIGHT_FALLBACK;
-				linePos += bgLineHeight;
+			// 如果这行是主行，检查其后所有需要放在主行上方的激活BG行
+			// 主行需要向下移动，为所有BG行腾出空间
+			if (!line.isBG) {
+				let bgId = i + 1;
+				while (bgId < this.currentLyricLineObjects.length && this.currentLyricLineObjects[bgId].getLine().isBG) {
+					if (activeBgAboveMain.has(bgId)) {
+						const bgLineHeight = this.lyricLinesSize.get(this.currentLyricLineObjects[bgId])?.[1] ?? LINE_HEIGHT_FALLBACK;
+						linePos += bgLineHeight;
+					}
+					bgId++;
+				}
 			}
 
 			lineObj.setTransform(
