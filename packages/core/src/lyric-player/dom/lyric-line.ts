@@ -1233,10 +1233,9 @@ export class LyricLineEl extends LyricLineBase {
 		for (const word of this.splittedWords) {
 			const el = word.mainElement;
 			if (el) {
-				const rect = el.getBoundingClientRect();
 				word.padding = Number.parseFloat(getComputedStyle(el).paddingLeft);
-				word.width = rect.width || el.clientWidth;
-				word.height = rect.height || el.clientHeight;
+				word.width = el.clientWidth - word.padding * 2;
+				word.height = el.clientHeight - word.padding * 2;
 			} else {
 				word.width = 0;
 				word.height = 0;
@@ -1248,13 +1247,11 @@ export class LyricLineEl extends LyricLineBase {
 		for (const chunkInfo of this.chunkMaskInfos) {
 			if (chunkInfo.containerEl) {
 				const el = chunkInfo.containerEl;
-				const rect = el.getBoundingClientRect();
 				// 获取第一个子元素（emphasizeWrapper）的尺寸作为参考
 				const firstChild = el.querySelector(`.${styles.emphasizeWrapper}`) as HTMLElement;
 				if (firstChild) {
-					const firstChildRect = firstChild.getBoundingClientRect();
-					chunkInfo.width = rect.width || el.clientWidth;
-					chunkInfo.height = firstChildRect.height || firstChild.clientHeight;
+					chunkInfo.width = el.clientWidth;
+					chunkInfo.height = firstChild.clientHeight;
 				}
 			}
 		}
@@ -1274,9 +1271,8 @@ export class LyricLineEl extends LyricLineBase {
 		for (const word of this.splittedWords) {
 			const wordEl = word.mainElement;
 			if (wordEl) {
-				const rect = wordEl.getBoundingClientRect();
-				word.width = rect.width || wordEl.clientWidth;
-				word.height = rect.height || wordEl.clientHeight;
+				word.width = wordEl.clientWidth;
+				word.height = wordEl.clientHeight;
 				const fadeWidth = word.height * this.lyricPlayer.getWordFadeWidth();
 				const [maskImage, totalAspect] = generateFadeGradient(
 					fadeWidth / word.width,
@@ -1371,8 +1367,7 @@ export class LyricLineEl extends LyricLineBase {
 	) {
 		// 添加动画标识 class
 		element.classList.add(styles.hasAnimation);
-		const rect = element.getBoundingClientRect();
-		const wordWidth = rect.width || element.clientWidth || 0;
+		const wordWidth = element.clientWidth || 0;
 
 		const [maskImage, totalAspect] = generateFadeGradient(
 			fadeWidth / Math.max(1, wordWidth),
@@ -1734,17 +1729,13 @@ export class LyricLineEl extends LyricLineBase {
 		if (rubySpans.length === 0) return;
 
 		// 计算每个字符的宽度和时间信息
-		const charInfos = rubySpans.map((span) => {
-			const rect = span.getBoundingClientRect();
-			return {
-				startTime: Number(span.dataset.startTime || word.startTime),
-				endTime: Number(span.dataset.endTime || word.endTime),
-				width: rect.width || span.clientWidth,
-			};
-		});
+		const charInfos = rubySpans.map((span) => ({
+			startTime: Number(span.dataset.startTime || word.startTime),
+			endTime: Number(span.dataset.endTime || word.endTime),
+			width: span.clientWidth,
+		}));
 
-		const containerRect = containerEl.getBoundingClientRect();
-		const containerWidth = containerRect.width || containerEl.clientWidth;
+		const containerWidth = containerEl.clientWidth;
 
 		const [maskImage, totalAspect] = generateFadeGradient(
 			fadeWidth / Math.max(1, containerWidth),
@@ -1874,11 +1865,10 @@ export class LyricLineEl extends LyricLineBase {
 			span.classList.add(styles.hasAnimation);
 			const startTime = Number(span.dataset.startTime || word.startTime);
 			const endTime = Number(span.dataset.endTime || word.endTime);
-			const spanRect = span.getBoundingClientRect();
-			const spanWidth = spanRect.width || span.clientWidth;
+			const spanWidth = span.clientWidth;
 
 			// 使用分段自身的高度计算 fadeWidth
-			const spanFadeWidth = (spanRect.height || span.clientHeight) * this.lyricPlayer.getWordFadeWidth();
+			const spanFadeWidth = span.clientHeight * this.lyricPlayer.getWordFadeWidth();
 
 			// 创建遮罩渐变
 			const [maskImage, totalAspect] = generateFadeGradient(
@@ -1965,8 +1955,7 @@ export class LyricLineEl extends LyricLineBase {
 	) {
 		// 添加动画标识 class
 		element.classList.add(styles.hasAnimation);
-		const rect = element.getBoundingClientRect();
-		const elementWidth = rect.width || element.clientWidth || 0;
+		const elementWidth = element.clientWidth || 0;
 		const elementPadding = 0; // 简化处理，没有额外的 padding
 
 		const [maskImage, totalAspect] = generateFadeGradient(
