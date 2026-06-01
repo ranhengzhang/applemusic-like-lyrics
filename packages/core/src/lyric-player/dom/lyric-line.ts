@@ -28,6 +28,19 @@ interface RealWord extends LyricWord {
 	height: number;
 	padding: number;
 	shouldEmphasize: boolean;
+	chunkIndex?: number; // 所属的 chunk 索引，用于合并遮罩动画
+}
+
+// Chunk 级别的遮罩动画信息
+interface ChunkMaskInfo {
+	words: RealWord[]; // 属于这个 chunk 的所有单词
+	containerEl: HTMLSpanElement | null; // 动画容器元素
+	maskAnimations: Animation[]; // chunk 级别的遮罩动画
+	startTime: number;
+	endTime: number;
+	canMerge: boolean; // 是否可以合并动画（无 ruby，无逐字音译）
+	width?: number; // 容器宽度
+	height?: number; // 容器高度
 }
 
 const ANIMATION_FRAME_QUANTITY = 32;
@@ -87,6 +100,8 @@ export class LyricLineEl extends LyricLineBase {
 	private splittedWords: RealWord[] = [];
 	// 标记是否已经构建了行内的实际 DOM（单词与动画等）
 	private built = false;
+	// Chunk 级别的遮罩动画信息
+	private chunkMaskInfos: ChunkMaskInfo[] = [];
 
 	// 由 LyricPlayer 来设置
 	lineSize: number[] = [0, 0];
@@ -221,6 +236,7 @@ export class LyricLineEl extends LyricLineBase {
 			actualMaskTime - this.lyricLine.startTime,
 		);
 
+		// 处理单词级别的动画
 		for (const word of this.splittedWords) {
 			for (const a of word.elementAnimations) {
 				a.currentTime = relativeTime;
@@ -255,6 +271,27 @@ export class LyricLineEl extends LyricLineBase {
 				}
 			}
 		}
+
+		// 处理 chunk 级别的合并遮罩动画
+		for (const chunkInfo of this.chunkMaskInfos) {
+			for (const a of chunkInfo.maskAnimations) {
+				const t = Math.min(this.totalDuration, maskRelativeTime);
+				a.currentTime = t;
+				a.playbackRate = 1;
+
+				const timing = a.effect?.getComputedTiming();
+				const duration = (timing?.duration as number) || 0;
+				const delay = (timing?.delay as number) || 0;
+				const endTime = delay + duration;
+
+				if (shouldPlay && t < endTime) {
+					a.play();
+				} else {
+					a.pause();
+				}
+			}
+		}
+
 		main.classList.add(styles.active);
 	}
 
@@ -280,6 +317,14 @@ export class LyricLineEl extends LyricLineBase {
 				a.pause();
 			}
 		}
+
+		// 暂停 chunk 级别的合并遮罩动画
+		for (const chunkInfo of this.chunkMaskInfos) {
+			for (const a of chunkInfo.maskAnimations) {
+				a.pause();
+			}
+		}
+
 		main.classList.remove(styles.active);
 	}
 
@@ -287,6 +332,8 @@ export class LyricLineEl extends LyricLineBase {
 
 	async resume() {
 		if (!this.isEnabled) return;
+
+		// 恢复单词级别的动画
 		for (const word of this.splittedWords) {
 			for (const a of word.elementAnimations) {
 				if (
@@ -322,6 +369,21 @@ export class LyricLineEl extends LyricLineBase {
 					if (a.playState !== "finished" && currentTime < endTime) {
 						a.play();
 					}
+				}
+			}
+		}
+
+		// 恢复 chunk 级别的合并遮罩动画
+		for (const chunkInfo of this.chunkMaskInfos) {
+			for (const a of chunkInfo.maskAnimations) {
+				const timing = a.effect?.getComputedTiming();
+				const duration = (timing?.duration as number) || 0;
+				const delay = (timing?.delay as number) || 0;
+				const endTime = delay + duration;
+				const currentTime = (a.currentTime as number) || 0;
+
+				if (a.playState !== "finished" && currentTime < endTime) {
+					a.play();
 				}
 			}
 		}
@@ -337,11 +399,26 @@ export class LyricLineEl extends LyricLineBase {
 				a.pause();
 			}
 		}
+		// 暂停 chunk 级别的合并遮罩动画
+		for (const chunkInfo of this.chunkMaskInfos) {
+			for (const a of chunkInfo.maskAnimations) {
+				a.pause();
+			}
+		}
 	}
 	setMaskAnimationState(maskAnimationTime = 0) {
 		const t = maskAnimationTime - this.lyricLine.startTime;
 		for (const word of this.splittedWords) {
 			for (const a of word.maskAnimations) {
+				a.currentTime = Math.min(this.totalDuration, Math.max(0, t));
+				a.playbackRate = 1;
+				if (t >= 0 && t < this.totalDuration) a.play();
+				else a.pause();
+			}
+		}
+		// 更新 chunk 级别的合并遮罩动画状态
+		for (const chunkInfo of this.chunkMaskInfos) {
+			for (const a of chunkInfo.maskAnimations) {
 				a.currentTime = Math.min(this.totalDuration, Math.max(0, t));
 				a.playbackRate = 1;
 				if (t >= 0 && t < this.totalDuration) a.play();
@@ -460,54 +537,135 @@ export class LyricLineEl extends LyricLineBase {
 		);
 		main.innerHTML = "";
 
-		// 首先将 chunkedWords 完全扁平化为单个单词数组
-		const flatWords: LyricWord[] = [];
+		// 重置 chunk 信息
+		this.chunkMaskInfos = [];
+		let chunkIndex = 0;
+
+		// 处理每个 chunk，保持 chunk 边界（用于 noBreakWrapper）
+		// 同时处理每个 chunk 内部的 ruby 短语
 		for (const chunk of chunkedWords) {
-			if (Array.isArray(chunk)) {
-				flatWords.push(...chunk);
-			} else {
-				flatWords.push(chunk);
+			const words = Array.isArray(chunk) ? chunk : [chunk];
+
+			// 检查是否是纯空格
+			const isPureSpace = words.every((w) => !w.word.trim());
+			if (isPureSpace) {
+				const textContent = words.map((w) => w.word).join("");
+				main.appendChild(document.createTextNode(textContent));
+				continue;
 			}
-		}
 
-		// 处理 Ruby 短语合并
-		const resultWords: (LyricWord | LyricWord[])[] = [];
-		let i = 0;
-		while (i < flatWords.length) {
-			const word = flatWords[i];
-			const hasRuby = (word.ruby?.length ?? 0) > 0;
-
-			// 如果是 ruby 短语起始，收集整个短语
-			if (hasRuby && word.rubyPhraseStart) {
-				const rubyPhrase: LyricWord[] = [word];
-				i++;
-
-				// 向后搜寻需要合并的 ruby 单词（必须连续有 ruby 且不是新的短语起始）
-				while (i < flatWords.length) {
-					const nextWord = flatWords[i];
-					const nextHasRuby = (nextWord.ruby?.length ?? 0) > 0;
-
-					// 只有当下一个单词有 ruby 且不是短语起始时才合并
-					if (nextHasRuby && !nextWord.rubyPhraseStart) {
-						rubyPhrase.push(nextWord);
-						i++;
-					} else {
-						break;
-					}
+			// 判断这个 chunk 是否可以合并遮罩动画
+			// 条件：没有 ruby，没有逐字音译（分段 roman）
+			const hasRuby = words.some(w => (w.ruby?.length ?? 0) > 0);
+			const hasSegmentedRoman = hasRomanLine && words.some(w => {
+				const roman = w.romanWord?.trim() ?? "";
+				const rubySegments = this.getRubySegments(w);
+				if (rubySegments.length > 0) {
+					const romanSegments = segmentRomanByRuby(roman, rubySegments);
+					return romanSegments && romanSegments.length > 0;
 				}
+				return false;
+			});
+			const canMerge = !hasRuby && !hasSegmentedRoman && words.length > 1;
 
-				resultWords.push(rubyPhrase);
-			} else {
-				resultWords.push(word);
-				i++;
+			// 创建 chunk 级别的遮罩动画信息
+			const chunkMaskInfo: ChunkMaskInfo = {
+				words: [],
+				containerEl: null,
+				maskAnimations: [],
+				startTime: Math.min(...words.map(w => w.startTime)),
+				endTime: Math.max(...words.map(w => w.endTime)),
+				canMerge,
+			};
+
+			// 为这个 chunk 创建 noBreakWrapper（保持同一语义单元不换行）
+			const noBreakWrapper = document.createElement("span");
+			noBreakWrapper.classList.add(styles.noBreakWrapper);
+
+			// 确定分音节元素的父容器
+			// 如果可以合并，使用 mergedMaskContainer 作为父容器
+			// 否则直接使用 noBreakWrapper
+			let wordParent: HTMLSpanElement = noBreakWrapper;
+			if (canMerge) {
+				const mergedContainer = this.createMergedMaskContainer(words);
+				noBreakWrapper.appendChild(mergedContainer);
+				chunkMaskInfo.containerEl = mergedContainer;
+				wordParent = mergedContainer;
 			}
+
+			// 处理 chunk 内部的 ruby 短语
+			let i = 0;
+			while (i < words.length) {
+				const word = words[i];
+				const wordHasRuby = (word.ruby?.length ?? 0) > 0;
+
+				// 如果是 ruby 短语起始，收集整个短语
+				if (wordHasRuby && word.rubyPhraseStart) {
+					const rubyPhrase: LyricWord[] = [word];
+					i++;
+
+					// 向后搜寻需要合并的 ruby 单词
+					while (i < words.length) {
+						const nextWord = words[i];
+						const nextHasRuby = (nextWord.ruby?.length ?? 0) > 0;
+
+						if (nextHasRuby && !nextWord.rubyPhraseStart) {
+							rubyPhrase.push(nextWord);
+							i++;
+						} else {
+							break;
+						}
+					}
+
+					const realWord = this.buildWord(rubyPhrase, wordParent, hasRubyLine, hasRomanLine, chunkIndex);
+					if (realWord) chunkMaskInfo.words.push(realWord);
+				} else {
+					const realWord = this.buildWord(word, wordParent, hasRubyLine, hasRomanLine, chunkIndex);
+					if (realWord) chunkMaskInfo.words.push(realWord);
+					i++;
+				}
+			}
+
+			this.chunkMaskInfos.push(chunkMaskInfo);
+			chunkIndex++;
+			main.appendChild(noBreakWrapper);
 		}
 
-		for (const item of resultWords) {
-			this.buildWord(item, main, hasRubyLine, hasRomanLine);
-		}
+		// DOM 构建完成后，统一创建强调动画
+		this.createEmphasizeAnimations();
 
 		this.setSubLinesText(trans, roman);
+	}
+
+	/**
+	 * 统一创建所有强调动画
+	 * 在 DOM 构建完成后调用，确保所有元素都已插入 DOM
+	 */
+	private createEmphasizeAnimations() {
+		for (const word of this.splittedWords) {
+			if (!word.shouldEmphasize) continue;
+
+			const wrapperEl = word.mainElement?.parentElement;
+			if (!wrapperEl) continue;
+
+			const emphasizeInfo = (wrapperEl as any).__emphasizeInfo;
+			if (!emphasizeInfo) continue;
+
+			const { merged, characterElements, rubyCharCount } = emphasizeInfo;
+
+			word.elementAnimations.push(
+				...this.initEmphasizeAnimation(
+					merged,
+					characterElements,
+					merged.endTime - merged.startTime,
+					merged.startTime - this.lyricLine.startTime,
+					rubyCharCount,
+				),
+			);
+
+			// 清理临时数据
+			delete (wrapperEl as any).__emphasizeInfo;
+		}
 	}
 
 	/** 设置翻译与音译行文本 */
@@ -652,15 +810,16 @@ export class LyricLineEl extends LyricLineBase {
 		main: HTMLDivElement,
 		hasRubyLine: boolean,
 		hasRomanLine: boolean,
-	) {
+		chunkIndex: number,
+	): RealWord | null {
 		const chunk = Array.isArray(input) ? input : [input];
-		if (chunk.length === 0) return;
+		if (chunk.length === 0) return null;
 
 		const isPureSpace = chunk.every((w) => !w.word.trim());
 		if (isPureSpace) {
 			const textContent = chunk.map((w) => w.word).join("");
 			main.appendChild(document.createTextNode(textContent));
-			return;
+			return null;
 		}
 
 		const merged = chunk.reduce(
@@ -689,6 +848,7 @@ export class LyricLineEl extends LyricLineBase {
 		wrapperWordEl.classList.add(styles.emphasizeWrapper);
 
 		const characterElements: HTMLElement[] = [];
+		let firstRealWord: RealWord | null = null;
 
 		// 检查是否是 ruby 短语（多个单词共享 ruby）
 		const isRubyPhrase = chunk.length > 1 && chunk.some(w => (w.ruby?.length ?? 0) > 0);
@@ -696,6 +856,7 @@ export class LyricLineEl extends LyricLineBase {
 		if (isRubyPhrase) {
 			// 创建合并的 ruby 短语 DOM
 			const realWord = this.createRubyPhraseWord(chunk, emp, hasRubyLine, hasRomanLine);
+			realWord.chunkIndex = chunkIndex;
 
 			if (emp) {
 				characterElements.push(...realWord.subElements);
@@ -703,6 +864,7 @@ export class LyricLineEl extends LyricLineBase {
 
 			this.splittedWords.push(realWord);
 			wrapperWordEl.appendChild(realWord.mainElement);
+			firstRealWord = realWord;
 		} else {
 			// 普通单词处理
 			for (const word of chunk) {
@@ -713,6 +875,7 @@ export class LyricLineEl extends LyricLineBase {
 
 				// 创建新的 word
 				const realWord = this.createWord(word, emp, hasRubyLine, hasRomanLine);
+				realWord.chunkIndex = chunkIndex;
 
 				if (emp) {
 					characterElements.push(...realWord.subElements);
@@ -720,28 +883,59 @@ export class LyricLineEl extends LyricLineBase {
 
 				this.splittedWords.push(realWord);
 				wrapperWordEl.appendChild(realWord.mainElement);
+				if (!firstRealWord) firstRealWord = realWord;
 			}
 		}
 
-		if (emp && this.splittedWords.length > 0) {
-			const lastWordOfChunk = this.splittedWords[this.splittedWords.length - 1];
+		// 将 emphasizeWrapper 添加到父容器（noBreakWrapper）
+		if (merged.word.trimStart() !== merged.word) {
+			main.appendChild(document.createTextNode(" "));
+		}
+
+		main.appendChild(wrapperWordEl);
+
+		// 如果需要强调，记录强调动画信息供后续统一创建
+		if (emp && firstRealWord) {
 			const rubyCharCount = chunk.reduce(
 				(total, word) => total + this.getRubyCharCount(word),
 				0,
 			);
-
-			lastWordOfChunk.elementAnimations.push(
-				...this.initEmphasizeAnimation(
-					merged,
-					characterElements,
-					merged.endTime - merged.startTime,
-					merged.startTime - this.lyricLine.startTime,
-					rubyCharCount,
-				),
-			);
+			firstRealWord.shouldEmphasize = true;
+			// 将强调动画信息存储在元素上，供后续创建
+			(wrapperWordEl as any).__emphasizeInfo = {
+				merged,
+				characterElements,
+				rubyCharCount,
+			};
 		}
 
-		main.appendChild(wrapperWordEl);
+		return firstRealWord;
+	}
+
+	/**
+	 * 创建合并的遮罩动画容器
+	 * 这个容器包裹所有分音节元素，遮罩动画直接应用到这个容器上
+	 */
+	private createMergedMaskContainer(
+		words: LyricWord[],
+	): HTMLSpanElement {
+		const container = document.createElement("span");
+		container.classList.add(styles.mergedMaskContainer);
+
+		// 在容器上存储每个音节的时间信息，用于分段动画
+		const mergedStartTime = Math.min(...words.map(w => w.startTime));
+		const mergedEndTime = Math.max(...words.map(w => w.endTime));
+		container.dataset.startTime = String(mergedStartTime);
+		container.dataset.endTime = String(mergedEndTime);
+
+		words.forEach((word, index) => {
+			container.dataset[`word${index}Start`] = String(word.startTime);
+			container.dataset[`word${index}End`] = String(word.endTime);
+			container.dataset[`word${index}Text`] = word.word;
+		});
+		container.dataset.wordCount = String(words.length);
+
+		return container;
 	}
 
 	/**
@@ -1039,15 +1233,32 @@ export class LyricLineEl extends LyricLineBase {
 		for (const word of this.splittedWords) {
 			const el = word.mainElement;
 			if (el) {
+				const rect = el.getBoundingClientRect();
 				word.padding = Number.parseFloat(getComputedStyle(el).paddingLeft);
-				word.width = el.clientWidth - word.padding * 2;
-				word.height = el.clientHeight - word.padding * 2;
+				word.width = rect.width || el.clientWidth;
+				word.height = rect.height || el.clientHeight;
 			} else {
 				word.width = 0;
 				word.height = 0;
 				word.padding = 0;
 			}
 		}
+
+		// 更新 chunk 容器的尺寸信息
+		for (const chunkInfo of this.chunkMaskInfos) {
+			if (chunkInfo.containerEl) {
+				const el = chunkInfo.containerEl;
+				const rect = el.getBoundingClientRect();
+				// 获取第一个子元素（emphasizeWrapper）的尺寸作为参考
+				const firstChild = el.querySelector(`.${styles.emphasizeWrapper}`) as HTMLElement;
+				if (firstChild) {
+					const firstChildRect = firstChild.getBoundingClientRect();
+					chunkInfo.width = rect.width || el.clientWidth;
+					chunkInfo.height = firstChildRect.height || firstChild.clientHeight;
+				}
+			}
+		}
+
 		if (this.lyricPlayer.supportMaskImage) {
 			this.generateWebAnimationBasedMaskImage();
 		} else {
@@ -1063,8 +1274,9 @@ export class LyricLineEl extends LyricLineBase {
 		for (const word of this.splittedWords) {
 			const wordEl = word.mainElement;
 			if (wordEl) {
-				word.width = wordEl.clientWidth;
-				word.height = wordEl.clientHeight;
+				const rect = wordEl.getBoundingClientRect();
+				word.width = rect.width || wordEl.clientWidth;
+				word.height = rect.height || wordEl.clientHeight;
 				const fadeWidth = word.height * this.lyricPlayer.getWordFadeWidth();
 				const [maskImage, totalAspect] = generateFadeGradient(
 					fadeWidth / word.width,
@@ -1102,9 +1314,35 @@ export class LyricLineEl extends LyricLineBase {
 				this.lyricLine.endTime,
 			) - this.lyricLine.startTime;
 
+		// 首先处理 chunk 级别的合并动画
+		for (const chunkInfo of this.chunkMaskInfos) {
+			// 取消之前的 chunk 动画
+			for (const a of chunkInfo.maskAnimations) {
+				a.cancel();
+			}
+			chunkInfo.maskAnimations = [];
+
+			if (chunkInfo.canMerge && chunkInfo.containerEl) {
+				// 为可合并的 chunk 创建合并遮罩动画
+				this.createMergedChunkAnimation(chunkInfo, totalFadeDuration);
+			}
+		}
+
 		this.splittedWords.forEach((word, i) => {
 			const wordEl = word.mainElement;
 			if (!wordEl) return;
+
+			// 如果这个词属于一个可以合并的 chunk，跳过单独创建遮罩动画
+			// 因为合并动画已经覆盖了整个 chunk
+			const chunkInfo = word.chunkIndex !== undefined ? this.chunkMaskInfos[word.chunkIndex] : undefined;
+			if (chunkInfo?.canMerge) {
+				// 取消之前的动画
+				for (const a of word.maskAnimations) {
+					a.cancel();
+				}
+				word.maskAnimations = [];
+				return;
+			}
 
 			const fadeWidth = word.height * this.lyricPlayer.getWordFadeWidth();
 
@@ -1133,7 +1371,8 @@ export class LyricLineEl extends LyricLineBase {
 	) {
 		// 添加动画标识 class
 		element.classList.add(styles.hasAnimation);
-		const wordWidth = element.clientWidth || 0;
+		const rect = element.getBoundingClientRect();
+		const wordWidth = rect.width || element.clientWidth || 0;
 
 		const [maskImage, totalAspect] = generateFadeGradient(
 			fadeWidth / Math.max(1, wordWidth),
@@ -1201,6 +1440,123 @@ export class LyricLineEl extends LyricLineBase {
 			word.maskAnimations.push(ani);
 		} catch (err) {
 			console.warn("应用遮罩渐变动画发生错误", frames, totalFadeDuration, err);
+		}
+	}
+
+	/**
+	 * 为合并的 chunk 创建分段遮罩动画
+	 * 整个 chunk 使用一个动画，根据每个音节的时间分段移动
+	 */
+	private createMergedChunkAnimation(
+		chunkInfo: ChunkMaskInfo,
+		totalFadeDuration: number,
+	) {
+		if (!chunkInfo.containerEl) return;
+
+		const containerEl = chunkInfo.containerEl;
+
+		// 获取容器尺寸（优先使用缓存的尺寸，如果没有则使用 getBoundingClientRect）
+		const rect = containerEl.getBoundingClientRect();
+		const containerWidth = chunkInfo.width || rect.width || containerEl.clientWidth || 1;
+		const containerHeight = chunkInfo.height || rect.height || containerEl.clientHeight || 1;
+		const fadeWidth = containerHeight * this.lyricPlayer.getWordFadeWidth();
+
+		// 添加动画标识 class
+		containerEl.classList.add(styles.hasAnimation);
+
+		const [maskImage, totalAspect] = generateFadeGradient(
+			fadeWidth / Math.max(1, containerWidth),
+		);
+		const totalAspectStr = `${totalAspect * 100}% 100%`;
+
+		// 设置遮罩样式
+		if (this.lyricPlayer.supportMaskImage) {
+			containerEl.style.maskImage = maskImage;
+			containerEl.style.maskRepeat = "no-repeat";
+			containerEl.style.maskOrigin = "left";
+			containerEl.style.maskSize = totalAspectStr;
+		} else {
+			containerEl.style.webkitMaskImage = maskImage;
+			containerEl.style.webkitMaskRepeat = "no-repeat";
+			containerEl.style.webkitMaskOrigin = "left";
+			containerEl.style.webkitMaskSize = totalAspectStr;
+		}
+
+		const minOffset = -(containerWidth + fadeWidth);
+		const clampOffset = (x: number) => Math.max(minOffset, Math.min(0, x));
+
+		// 生成动画帧
+		const frames: Keyframe[] = [];
+
+		// 获取每个音节的信息
+		const wordCount = parseInt(containerEl.dataset.wordCount || "0");
+		const words: { startTime: number; endTime: number; text: string }[] = [];
+		for (let i = 0; i < wordCount; i++) {
+			words.push({
+				startTime: parseFloat(containerEl.dataset[`word${i}Start`] || "0"),
+				endTime: parseFloat(containerEl.dataset[`word${i}End`] || "0"),
+				text: containerEl.dataset[`word${i}Text`] || "",
+			});
+		}
+
+		// 计算每个音节的宽度比例
+		const totalTextLength = words.reduce((sum, w) => sum + w.text.length, 0);
+		let currentWidthRatio = 0;
+
+		// 初始状态（遮罩在左侧外）
+		frames.push({
+			offset: 0,
+			maskPosition: `${clampOffset(-containerWidth - fadeWidth)}px 0`,
+		});
+
+		// 为每个音节创建动画段
+		for (const word of words) {
+			const wordWidth = (word.text.length / totalTextLength) * containerWidth;
+			const wordStartStamp = word.startTime - this.lyricLine.startTime;
+			const wordEndStamp = word.endTime - this.lyricLine.startTime;
+
+			// 音节开始时的位置
+			const startOffset = Math.max(0, wordStartStamp / totalFadeDuration);
+			const startPos = clampOffset(-containerWidth - fadeWidth + currentWidthRatio * containerWidth);
+
+			if (startOffset > 0 && frames[frames.length - 1]?.offset !== startOffset) {
+				frames.push({
+					offset: startOffset,
+					maskPosition: `${startPos}px 0`,
+				});
+			}
+
+			// 音节结束时的位置（显示这个音节）
+			const endOffset = Math.min(1, wordEndStamp / totalFadeDuration);
+			const endPos = clampOffset(-containerWidth - fadeWidth + (currentWidthRatio + word.text.length / totalTextLength) * containerWidth + fadeWidth * 0.5);
+
+			frames.push({
+				offset: endOffset,
+				maskPosition: `${endPos}px 0`,
+			});
+
+			currentWidthRatio += word.text.length / totalTextLength;
+		}
+
+		// 保持显示状态到结束
+		const lastOffset = frames[frames.length - 1]?.offset || 0;
+		if (lastOffset < 1) {
+			frames.push({
+				offset: 1,
+				maskPosition: frames[frames.length - 1]?.maskPosition || `${clampOffset(fadeWidth * 0.5)}px 0`,
+			});
+		}
+
+		try {
+			const ani = containerEl.animate(frames, {
+				duration: totalFadeDuration || 1,
+				id: `merged-chunk-${chunkInfo.startTime}`,
+				fill: "both",
+			});
+			ani.pause();
+			chunkInfo.maskAnimations.push(ani);
+		} catch (err) {
+			console.warn("应用合并遮罩动画发生错误", frames, totalFadeDuration, err);
 		}
 	}
 
@@ -1378,13 +1734,17 @@ export class LyricLineEl extends LyricLineBase {
 		if (rubySpans.length === 0) return;
 
 		// 计算每个字符的宽度和时间信息
-		const charInfos = rubySpans.map((span) => ({
-			startTime: Number(span.dataset.startTime || word.startTime),
-			endTime: Number(span.dataset.endTime || word.endTime),
-			width: span.clientWidth,
-		}));
+		const charInfos = rubySpans.map((span) => {
+			const rect = span.getBoundingClientRect();
+			return {
+				startTime: Number(span.dataset.startTime || word.startTime),
+				endTime: Number(span.dataset.endTime || word.endTime),
+				width: rect.width || span.clientWidth,
+			};
+		});
 
-		const containerWidth = containerEl.clientWidth;
+		const containerRect = containerEl.getBoundingClientRect();
+		const containerWidth = containerRect.width || containerEl.clientWidth;
 
 		const [maskImage, totalAspect] = generateFadeGradient(
 			fadeWidth / Math.max(1, containerWidth),
@@ -1514,10 +1874,11 @@ export class LyricLineEl extends LyricLineBase {
 			span.classList.add(styles.hasAnimation);
 			const startTime = Number(span.dataset.startTime || word.startTime);
 			const endTime = Number(span.dataset.endTime || word.endTime);
-			const spanWidth = span.clientWidth;
+			const spanRect = span.getBoundingClientRect();
+			const spanWidth = spanRect.width || span.clientWidth;
 
 			// 使用分段自身的高度计算 fadeWidth
-			const spanFadeWidth = span.clientHeight * this.lyricPlayer.getWordFadeWidth();
+			const spanFadeWidth = (spanRect.height || span.clientHeight) * this.lyricPlayer.getWordFadeWidth();
 
 			// 创建遮罩渐变
 			const [maskImage, totalAspect] = generateFadeGradient(
@@ -1604,7 +1965,8 @@ export class LyricLineEl extends LyricLineBase {
 	) {
 		// 添加动画标识 class
 		element.classList.add(styles.hasAnimation);
-		const elementWidth = element.clientWidth || 0;
+		const rect = element.getBoundingClientRect();
+		const elementWidth = rect.width || element.clientWidth || 0;
 		const elementPadding = 0; // 简化处理，没有额外的 padding
 
 		const [maskImage, totalAspect] = generateFadeGradient(
