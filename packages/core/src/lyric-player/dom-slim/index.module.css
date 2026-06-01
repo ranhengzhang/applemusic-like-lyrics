@@ -208,3 +208,17 @@
 .tmpDisableTransition {
 	transition: none !important;
 }
+
+/* 动画段容器样式 */
+.animationSegment {
+	position: absolute;
+	white-space: nowrap;
+	pointer-events: none;
+	color: inherit;
+}
+
+/* 禁止换行容器 - 包裹同一语义单元的音节 */
+.noBreakWrapper {
+	white-space: nowrap;
+	display: inline;
+}

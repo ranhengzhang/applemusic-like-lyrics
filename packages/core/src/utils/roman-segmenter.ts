@@ -156,7 +156,10 @@ export function getNextRomaji(
 				}
 
 				// 如果是 っ/ッ，可能还需要消耗一个字符
-				if ((rubyChar === "っ" || rubyChar === "ッ") && romanIndex < roman.length) {
+				if (
+					(rubyChar === "っ" || rubyChar === "ッ") &&
+					romanIndex < roman.length
+				) {
 					const nextR = roman[romanIndex];
 					if (!isSpace(nextR) && !isVowel(nextR)) {
 						romajiPart += nextR;
@@ -283,8 +286,9 @@ export function segmentRomanByRuby(
 				isSpace: result.romaji.trim().length === 0,
 			});
 
-			remainingRoman =
-				roman.slice(roman.indexOf(result.romaji) + result.romaji.length);
+			remainingRoman = roman.slice(
+				roman.indexOf(result.romaji) + result.romaji.length,
+			);
 		}
 
 		// 检查最后一次返回的剪除后的 ruby 字符串 trim 后是否为空
