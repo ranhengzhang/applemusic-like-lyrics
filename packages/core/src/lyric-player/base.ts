@@ -619,18 +619,24 @@ export abstract class LyricPlayerBase
 				// 收集所有连续的背景行
 				const bgLineIds: number[] = [];
 				let bgId = lastHotId + 1;
-				while (bgId < this.processedLines.length && this.processedLines[bgId]?.isBG) {
+				while (
+					bgId < this.processedLines.length &&
+					this.processedLines[bgId]?.isBG
+				) {
 					bgLineIds.push(bgId);
 					bgId++;
 				}
 
 				if (bgLineIds.length > 0) {
 					const nextMainLine = this.processedLines[bgId];
-					const bgLines = bgLineIds.map(id => this.processedLines[id]);
-					const startTime = Math.min(line.startTime, ...bgLines.map(bg => bg.startTime));
+					const bgLines = bgLineIds.map((id) => this.processedLines[id]);
+					const startTime = Math.min(
+						line.startTime,
+						...bgLines.map((bg) => bg.startTime),
+					);
 					const endTime = Math.min(
 						Math.max(line.endTime, nextMainLine?.startTime ?? Number.MAX_VALUE),
-						Math.max(line.endTime, ...bgLines.map(bg => bg.endTime)),
+						Math.max(line.endTime, ...bgLines.map((bg) => bg.endTime)),
 					);
 					if (startTime > time || endTime <= time) {
 						this.hotLines.delete(lastHotId);
@@ -828,13 +834,18 @@ export abstract class LyricPlayerBase
 			if (line.isBG && i > 0) {
 				// 找到所属的主行（向前查找第一个非BG行）
 				let mainLineIndex = i - 1;
-				while (mainLineIndex >= 0 && this.currentLyricLineObjects[mainLineIndex].getLine().isBG) {
+				while (
+					mainLineIndex >= 0 &&
+					this.currentLyricLineObjects[mainLineIndex].getLine().isBG
+				) {
 					mainLineIndex--;
 				}
 				if (mainLineIndex >= 0) {
-					const mainLine = this.currentLyricLineObjects[mainLineIndex].getLine();
+					const mainLine =
+						this.currentLyricLineObjects[mainLineIndex].getLine();
 					// 获取主行的第一个音节起始时间
-					const mainFirstWordStart = mainLine.words[0]?.startTime ?? mainLine.startTime;
+					const mainFirstWordStart =
+						mainLine.words[0]?.startTime ?? mainLine.startTime;
 					// 获取 BG 行的起始时间
 					const bgStartTime = line.startTime;
 					// 如果 BG 行比主行第一个音节早 >1秒，则放在主行上方
@@ -951,15 +962,22 @@ export abstract class LyricPlayerBase
 			if (line.isBG && bgAboveMain.has(i) && (isActive || !this.isPlaying)) {
 				// 找到所属的主行索引
 				let mainLineIndex = i - 1;
-				while (mainLineIndex >= 0 && this.currentLyricLineObjects[mainLineIndex].getLine().isBG) {
+				while (
+					mainLineIndex >= 0 &&
+					this.currentLyricLineObjects[mainLineIndex].getLine().isBG
+				) {
 					mainLineIndex--;
 				}
 
 				if (mainLineIndex >= 0) {
 					// 获取主行的高度
-					const mainLineHeight = this.lyricLinesSize.get(this.currentLyricLineObjects[mainLineIndex])?.[1] ?? LINE_HEIGHT_FALLBACK;
+					const mainLineHeight =
+						this.lyricLinesSize.get(
+							this.currentLyricLineObjects[mainLineIndex],
+						)?.[1] ?? LINE_HEIGHT_FALLBACK;
 					// 获取 BG 行的高度
-					const bgLineHeight = this.lyricLinesSize.get(lineObj)?.[1] ?? LINE_HEIGHT_FALLBACK;
+					const bgLineHeight =
+						this.lyricLinesSize.get(lineObj)?.[1] ?? LINE_HEIGHT_FALLBACK;
 
 					// 计算这个 BG 行在其所属主行的所有 BG 行中的索引
 					let bgIndexInGroup = 0;
@@ -968,7 +986,8 @@ export abstract class LyricPlayerBase
 					}
 
 					// BG 行向上偏移：主行高度 + (BG索引+1) * BG行高度
-					linePos = curPos - mainLineHeight - (bgIndexInGroup + 1) * bgLineHeight;
+					linePos =
+						curPos - mainLineHeight - (bgIndexInGroup + 1) * bgLineHeight;
 				}
 			}
 
@@ -976,9 +995,15 @@ export abstract class LyricPlayerBase
 			// 主行需要向下移动，为所有BG行腾出空间
 			if (!line.isBG) {
 				let bgId = i + 1;
-				while (bgId < this.currentLyricLineObjects.length && this.currentLyricLineObjects[bgId].getLine().isBG) {
+				while (
+					bgId < this.currentLyricLineObjects.length &&
+					this.currentLyricLineObjects[bgId].getLine().isBG
+				) {
 					if (activeBgAboveMain.has(bgId)) {
-						const bgLineHeight = this.lyricLinesSize.get(this.currentLyricLineObjects[bgId])?.[1] ?? LINE_HEIGHT_FALLBACK;
+						const bgLineHeight =
+							this.lyricLinesSize.get(
+								this.currentLyricLineObjects[bgId],
+							)?.[1] ?? LINE_HEIGHT_FALLBACK;
 						linePos += bgLineHeight;
 					}
 					bgId++;
