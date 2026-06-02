@@ -1505,14 +1505,38 @@ export class LyricLineEl extends LyricLineBase {
 		});
 
 		// 为每个音节创建动画段
-		for (const word of words) {
+		let lastEndPos = -containerWidth - fadeWidth; // 上一个音节的结束位置
+
+		for (let i = 0; i < words.length; i++) {
+			const word = words[i];
 			const wordWidth = (word.text.length / totalTextLength) * containerWidth;
 			const wordStartStamp = word.startTime - this.lyricLine.startTime;
 			const wordEndStamp = word.endTime - this.lyricLine.startTime;
 
 			// 音节开始时的位置
 			const startOffset = Math.max(0, wordStartStamp / totalFadeDuration);
-			const startPos = clampOffset(-containerWidth - fadeWidth + currentWidthRatio * containerWidth);
+			let startPos = clampOffset(-containerWidth - fadeWidth + currentWidthRatio * containerWidth);
+
+			// 确保开始位置不小于上一个音节的结束位置（防止闪回）
+			if (i > 0 && startPos < lastEndPos) {
+				startPos = lastEndPos;
+			}
+
+			// 检查是否有间隙（当前音节开始时间 > 上一个音节结束时间）
+			if (i > 0) {
+				const prevWord = words[i - 1];
+				const prevEndStamp = prevWord.endTime - this.lyricLine.startTime;
+				const gapStartOffset = Math.max(0, prevEndStamp / totalFadeDuration);
+				const gapEndOffset = Math.max(0, wordStartStamp / totalFadeDuration);
+
+				// 如果有间隙，在间隙期间保持上一个音节的结束位置
+				if (gapEndOffset > gapStartOffset && frames[frames.length - 1]?.offset !== gapStartOffset) {
+					frames.push({
+						offset: gapStartOffset,
+						maskPosition: `${lastEndPos}px 0`,
+					});
+				}
+			}
 
 			if (startOffset > 0 && frames[frames.length - 1]?.offset !== startOffset) {
 				frames.push({
@@ -1530,6 +1554,7 @@ export class LyricLineEl extends LyricLineBase {
 				maskPosition: `${endPos}px 0`,
 			});
 
+			lastEndPos = endPos; // 更新上一个音节的结束位置
 			currentWidthRatio += word.text.length / totalTextLength;
 		}
 
