@@ -100,6 +100,8 @@ export class LyricLineEl extends LyricLineBase {
 	private splittedWords: RealWord[] = [];
 	// 标记是否已经构建了行内的实际 DOM（单词与动画等）
 	private built = false;
+	// 防止 updateMaskImageSync 和 enable 互相递归调用
+	private _updatingMask = false;
 	// Chunk 级别的遮罩动画信息
 	private chunkMaskInfos: ChunkMaskInfo[] = [];
 
@@ -221,6 +223,9 @@ export class LyricLineEl extends LyricLineBase {
 		this.isEnabled = true;
 		this.element.classList.add(styles.active);
 		const main = this.element.children[0] as HTMLDivElement;
+
+		// 在行内动画开始之前确保蒙版动画已正确初始化
+		this.updateMaskImageSync();
 
 		const relativeTime = Math.max(
 			0,
@@ -1230,6 +1235,9 @@ export class LyricLineEl extends LyricLineBase {
 		this.updateMaskImageSync();
 	}
 	updateMaskImageSync() {
+		if (this._updatingMask) return;
+		this._updatingMask = true;
+		try {
 		for (const word of this.splittedWords) {
 			const el = word.mainElement;
 			if (el) {
@@ -1264,6 +1272,26 @@ export class LyricLineEl extends LyricLineBase {
 		if (this.isEnabled) {
 			const isPlayerRunning = this.lyricPlayer.getIsPlaying?.() ?? true;
 			this.enable(this.lyricPlayer.getCurrentTime(), isPlayerRunning);
+		} else {
+			// 即使行未启用，动画重建后也需要设置到正确的播放位置，
+			// 否则新动画会停留在初始隐藏位置（大的负值），导致歌词不可见
+			const t = Math.max(0, this.lyricPlayer.getCurrentTime() - this.lyricLine.startTime);
+			const clampedT = Math.min(this.totalDuration, t);
+			for (const word of this.splittedWords) {
+				for (const a of word.maskAnimations) {
+					a.currentTime = clampedT;
+					a.pause();
+				}
+			}
+			for (const chunkInfo of this.chunkMaskInfos) {
+				for (const a of chunkInfo.maskAnimations) {
+					a.currentTime = clampedT;
+					a.pause();
+				}
+			}
+		}
+		} finally {
+			this._updatingMask = false;
 		}
 	}
 
@@ -1441,6 +1469,13 @@ export class LyricLineEl extends LyricLineBase {
 	/**
 	 * 为合并的 chunk 创建分段遮罩动画
 	 * 整个 chunk 使用一个动画，根据每个音节的时间分段移动
+	 *
+	 * 算法：
+	 * 1. 起始位置：完全隐藏
+	 * 2. 每个分段移动距离：每个音节的右边位置 - 上个音节的结束位置
+	 *    （右边位置和结束位置都基于 DOM 中 hasAnimation 元素的实际宽度）
+	 * 3. 第一个分段移动距离：额外 + fadeWidth/2
+	 * 4. 最后一个分段移动距离：额外 + fadeWidth/2
 	 */
 	private createMergedChunkAnimation(
 		chunkInfo: ChunkMaskInfo,
@@ -1450,15 +1485,41 @@ export class LyricLineEl extends LyricLineBase {
 
 		const containerEl = chunkInfo.containerEl;
 
-		// 获取容器尺寸（优先使用缓存的尺寸，如果没有则使用 getBoundingClientRect）
-		const rect = containerEl.getBoundingClientRect();
-		const containerWidth = chunkInfo.width || rect.width || containerEl.clientWidth || 1;
-		const containerHeight = chunkInfo.height || rect.height || containerEl.clientHeight || 1;
+		// 获取容器的实际宽度和每个 hasAnimation 元素内容区域的右边位置
+		const containerRect = containerEl.getBoundingClientRect();
+		const containerComputedStyle = getComputedStyle(containerEl);
+		const containerPaddingLeft = parseFloat(containerComputedStyle.paddingLeft) || 0;
+		const hasAnimationEls = containerEl.querySelectorAll(`:scope > .${styles.emphasizeWrapper} .${styles.hasAnimation}`);
+		// wordRightPositions 相对于内容区域左边缘（扣除容器 paddingLeft 和子元素 paddingRight）
+		const wordRightPositions: number[] = [];
+		// 每个音节元素的 offsetWidth 减去左右 padding，作为实际内容宽度
+		const wordContentWidths: number[] = [];
+		hasAnimationEls.forEach((el) => {
+			const elHtml = el as HTMLElement;
+			const elRect = elHtml.getBoundingClientRect();
+			const computedStyle = getComputedStyle(elHtml);
+			const paddingRight = parseFloat(computedStyle.paddingRight) || 0;
+			const paddingLeft = parseFloat(computedStyle.paddingLeft) || 0;
+			// 相对于内容区域左边缘的位置
+			const rightPos = elRect.right - containerRect.left - containerPaddingLeft - paddingRight;
+			wordRightPositions.push(rightPos);
+			// offsetWidth 包含 padding 和 border，减去左右 padding 得到实际内容宽度
+			wordContentWidths.push(elHtml.offsetWidth - paddingLeft - paddingRight);
+		});
+		// 使用 offsetWidth 获取容器的整数像素宽度（包含 padding 和 border）
+		// 避免 getBoundingClientRect().width 的浮点数精度问题
+		const containerWidth = Math.max(
+			containerEl.offsetWidth || 1,
+			...wordRightPositions,
+		);
+
+		const containerHeight = chunkInfo.height || containerEl.clientHeight || 1;
 		const fadeWidth = containerHeight * this.lyricPlayer.getWordFadeWidth();
 
 		// 添加动画标识 class
 		containerEl.classList.add(styles.hasAnimation);
 
+		// mask-size 百分比相对于元素完整宽度，所以 totalAspect 用 containerWidth 计算
 		const [maskImage, totalAspect] = generateFadeGradient(
 			fadeWidth / Math.max(1, containerWidth),
 		);
@@ -1477,7 +1538,9 @@ export class LyricLineEl extends LyricLineBase {
 			containerEl.style.webkitMaskSize = totalAspectStr;
 		}
 
-		const minOffset = -(containerWidth + fadeWidth);
+		// 内容区域宽度（扣除 padding）
+		const contentWidth = containerWidth - containerPaddingLeft - (parseFloat(containerComputedStyle.paddingRight) || 0);
+		const minOffset = -(contentWidth + containerPaddingLeft + fadeWidth);
 		const clampOffset = (x: number) => Math.max(minOffset, Math.min(0, x));
 
 		// 生成动画帧
@@ -1494,68 +1557,69 @@ export class LyricLineEl extends LyricLineBase {
 			});
 		}
 
-		// 计算每个音节的宽度比例
-		const totalTextLength = words.reduce((sum, w) => sum + w.text.length, 0);
-		let currentWidthRatio = 0;
+		// 如果没有从 DOM 获取到右边位置，按字符数比例估算
+		if (wordRightPositions.length === 0) {
+			const totalTextLength = words.reduce((sum, w) => sum + w.text.length, 0);
+			let currentRight = 0;
+			for (const word of words) {
+				currentRight += (word.text.length / totalTextLength) * contentWidth;
+				wordRightPositions.push(currentRight);
+			}
+		}
 
-		// 初始状态（遮罩在左侧外）
+		// 初始状态（完全隐藏）
+		// 初始位置 = 内容宽度 + 左侧padding + fadeWidth
+		// 这样遮罩亮区右边缘恰好停在内容左边缘
+		const initialPos = -(contentWidth + containerPaddingLeft + fadeWidth);
 		frames.push({
 			offset: 0,
-			maskPosition: `${clampOffset(-containerWidth - fadeWidth)}px 0`,
+			maskPosition: `${clampOffset(initialPos)}px 0`,
 		});
 
 		// 为每个音节创建动画段
-		let lastEndPos = -containerWidth - fadeWidth; // 上一个音节的结束位置
+		let lastEndPos = initialPos; // 上一个音节的结束位置
 
 		for (let i = 0; i < words.length; i++) {
 			const word = words[i];
-			const wordWidth = (word.text.length / totalTextLength) * containerWidth;
 			const wordStartStamp = word.startTime - this.lyricLine.startTime;
 			const wordEndStamp = word.endTime - this.lyricLine.startTime;
 
-			// 音节开始时的位置
-			const startOffset = Math.max(0, wordStartStamp / totalFadeDuration);
-			let startPos = clampOffset(-containerWidth - fadeWidth + currentWidthRatio * containerWidth);
+			// 使用 offsetWidth 减去左右 padding 作为音节的实际内容宽度
+			const syllableWidth = wordContentWidths[i] || (wordRightPositions[i] - (i > 0 ? wordRightPositions[i - 1] : 0));
 
-			// 确保开始位置不小于上一个音节的结束位置（防止闪回）
-			if (i > 0 && startPos < lastEndPos) {
-				startPos = lastEndPos;
+			// 移动距离 = 音节实际宽度
+			let moveDistance = syllableWidth;
+
+			// 第一个分段：额外 + fadeWidth/2
+			if (i === 0) {
+				moveDistance += fadeWidth / 2;
 			}
 
-			// 检查是否有间隙（当前音节开始时间 > 上一个音节结束时间）
-			if (i > 0) {
-				const prevWord = words[i - 1];
-				const prevEndStamp = prevWord.endTime - this.lyricLine.startTime;
-				const gapStartOffset = Math.max(0, prevEndStamp / totalFadeDuration);
-				const gapEndOffset = Math.max(0, wordStartStamp / totalFadeDuration);
-
-				// 如果有间隙，在间隙期间保持上一个音节的结束位置
-				if (gapEndOffset > gapStartOffset && frames[frames.length - 1]?.offset !== gapStartOffset) {
-					frames.push({
-						offset: gapStartOffset,
-						maskPosition: `${lastEndPos}px 0`,
-					});
-				}
+			// 最后一个分段：额外 + fadeWidth/2
+			if (i === words.length - 1) {
+				moveDistance += fadeWidth / 2;
 			}
 
-			if (startOffset > 0 && frames[frames.length - 1]?.offset !== startOffset) {
+			// 计算这个音节的结束位置
+			const endPos = lastEndPos + moveDistance;
+
+			// 音节开始时的关键帧（停顿）
+			const startOffset = wordStartStamp / totalFadeDuration;
+			if (startOffset > 0) {
 				frames.push({
 					offset: startOffset,
-					maskPosition: `${startPos}px 0`,
+					maskPosition: `${clampOffset(lastEndPos)}px 0`,
 				});
 			}
 
-			// 音节结束时的位置（显示这个音节）
-			const endOffset = Math.min(1, wordEndStamp / totalFadeDuration);
-			const endPos = clampOffset(-containerWidth - fadeWidth + (currentWidthRatio + word.text.length / totalTextLength) * containerWidth + fadeWidth * 0.5);
-
+			// 音节结束时的关键帧
+			const endOffset = wordEndStamp / totalFadeDuration;
 			frames.push({
 				offset: endOffset,
-				maskPosition: `${endPos}px 0`,
+				maskPosition: `${clampOffset(endPos)}px 0`,
 			});
 
 			lastEndPos = endPos; // 更新上一个音节的结束位置
-			currentWidthRatio += word.text.length / totalTextLength;
 		}
 
 		// 保持显示状态到结束
@@ -1563,7 +1627,7 @@ export class LyricLineEl extends LyricLineBase {
 		if (lastOffset < 1) {
 			frames.push({
 				offset: 1,
-				maskPosition: frames[frames.length - 1]?.maskPosition || `${clampOffset(fadeWidth * 0.5)}px 0`,
+				maskPosition: frames[frames.length - 1]?.maskPosition || `${clampOffset(lastEndPos)}px 0`,
 			});
 		}
 
@@ -1590,6 +1654,44 @@ export class LyricLineEl extends LyricLineBase {
 		fadeWidth: number,
 		index: number,
 	) {
+		// 检查这个单词是否属于一个已合并的 chunk
+		// 如果是，跳过创建独立的遮罩动画，因为 chunk 级别的动画已经处理
+		if (word.chunkIndex !== undefined) {
+			const chunkInfo = this.chunkMaskInfos[word.chunkIndex];
+			if (chunkInfo?.canMerge && chunkInfo.containerEl) {
+				// 这个单词属于已合并的 chunk，不创建独立遮罩动画
+				// 但仍然需要处理 roman 动画
+				const romanWordEl = wordEl.querySelector(`.${styles.romanWord}`) as HTMLDivElement | null;
+				if (romanWordEl) {
+					const romanFadeWidth = romanWordEl.clientHeight * this.lyricPlayer.getWordFadeWidth();
+					const romanSegments = romanWordEl.querySelectorAll('span[data-is-roman-segment="true"]');
+					if (romanSegments.length > 0) {
+						this.applyMaskAnimationToRomanContainer(
+							romanWordEl,
+							totalFadeDuration,
+							romanFadeWidth,
+							word,
+							`fade-roman-container-${index}`,
+						);
+					} else {
+						const romanWordSpan = romanWordEl.querySelector("span") as HTMLSpanElement | null;
+						if (romanWordSpan) {
+							this.applyMaskAnimationToElement(
+								romanWordSpan as unknown as HTMLDivElement,
+								word.startTime,
+								word.endTime,
+								totalFadeDuration,
+								romanFadeWidth,
+								word,
+								`fade-word-roman-${word.word}-${index}`,
+							);
+						}
+					}
+				}
+				return;
+			}
+		}
+
 		// 检查是否是 ruby 短语（有 wordBody 结构）
 		const wordBodyEl = wordEl.querySelector(`.${styles.wordBody}`) as HTMLDivElement | null;
 		const rubyWordEl = wordEl.querySelector(`.${styles.rubyWord}`) as HTMLDivElement | null;
