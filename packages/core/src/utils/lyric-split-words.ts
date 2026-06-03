@@ -56,21 +56,23 @@ export function chunkAndSplitLyricWords(
 			}
 
 			if (isCJK(part) && part.length > 1 && romanWord.trim().length === 0) {
-				const chars = part.split("");
-				for (const char of chars) {
-					const charDuration = (1 / totalLength) * (w.endTime - w.startTime);
-					const startTime =
-						w.startTime +
-						(currentOffset / totalLength) * (w.endTime - w.startTime);
-					atoms.push({
-						word: char,
-						romanWord: "",
-						startTime: startTime,
-						endTime: startTime + charDuration,
-						obscene: obscene,
-					});
-					currentOffset += 1;
-				}
+				// CJK 文本不再拆分成单个字符
+				// 而是作为一个整体处理，让 Intl.Segmenter 或后续逻辑按语义分组
+				const partRealLen = part.length;
+				const duration =
+					(partRealLen / totalLength) * (w.endTime - w.startTime);
+				const startTime =
+					w.startTime +
+					(currentOffset / totalLength) * (w.endTime - w.startTime);
+
+				atoms.push({
+					word: part,
+					romanWord: "",
+					startTime: startTime,
+					endTime: startTime + duration,
+					obscene: obscene,
+				});
+				currentOffset += partRealLen;
 			} else {
 				const partRealLen = part.length;
 				const duration =
@@ -91,58 +93,36 @@ export function chunkAndSplitLyricWords(
 		}
 	}
 
-	if (!hasSegmenter) {
-		return atoms;
-	}
-
-	const fullText = atoms.map((a) => a.word).join("");
-	const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
-	const segments = Array.from(segmenter.segment(fullText));
-
+	// 对于 CJK 文本，按空格分组，而不是按语义分组
+	// 连续的 CJK 文本（没有空格）应该合并为一个组
 	const result: (LyricWord | LyricWord[])[] = [];
-	let atomIndex = 0;
-	let expectedLength = 0;
-	let actualLength = 0;
 	let currentGroup: LyricWord[] = [];
 
-	for (const segment of segments) {
-		const segmentLen = segment.segment.length;
-		expectedLength += segmentLen;
+	for (let i = 0; i < atoms.length; i++) {
+		const atom = atoms[i];
+		const isSpace = !atom.word.trim();
 
-		while (actualLength < expectedLength && atomIndex < atoms.length) {
-			const currentAtom = atoms[atomIndex];
-			currentGroup.push(currentAtom);
-			actualLength += currentAtom.word.length;
-			atomIndex++;
-		}
-
-		if (actualLength === expectedLength) {
-			while (currentGroup.length > 1 && !currentGroup[0].word.trim()) {
-				const spaceAtom = currentGroup.shift();
-				if (spaceAtom) {
-					result.push(spaceAtom);
-				}
-			}
-
+		if (isSpace) {
+			// 遇到空格，先结束当前组
 			if (currentGroup.length === 1) {
 				result.push(currentGroup[0]);
 			} else if (currentGroup.length > 1) {
 				result.push(currentGroup);
 			}
 			currentGroup = [];
-		}
-	}
-
-	while (atomIndex < atoms.length) {
-		result.push(atoms[atomIndex++]);
-	}
-
-	if (currentGroup.length > 0) {
-		if (currentGroup.length === 1) {
-			result.push(currentGroup[0]);
+			// 添加空格
+			result.push(atom);
 		} else {
-			result.push(currentGroup);
+			// 非空格，添加到当前组
+			currentGroup.push(atom);
 		}
+	}
+
+	// 处理最后一组
+	if (currentGroup.length === 1) {
+		result.push(currentGroup[0]);
+	} else if (currentGroup.length > 1) {
+		result.push(currentGroup);
 	}
 
 	return result;
