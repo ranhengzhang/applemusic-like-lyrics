@@ -2,9 +2,9 @@ import type { LyricLine, OptimizeLyricOptions } from "../interfaces.ts";
 
 const DEFAULT_OPTIMIZE_OPTIONS: OptimizeLyricOptions = {
 	normalizeSpaces: true,
-	resetLineTimestamps: true,
-	convertExcessiveBackgroundLines: true,
-	syncMainAndBackgroundLines: true,
+	resetLineTimestamps: false,
+	convertExcessiveBackgroundLines: false,
+	syncMainAndBackgroundLines: false,
 	cleanUnintentionalOverlaps: true,
 	tryAdvanceStartTime: true,
 };
@@ -195,9 +195,32 @@ function tryAdvanceStartTime(lines: LyricLine[]) {
 			line.startTime = newStartTime;
 		}
 
+		// 单独计算背景行的提前时间
 		const nextLine = lines[i + 1];
 		if (nextLine?.isBG) {
-			nextLine.startTime = line.startTime;
+			let bgTargetAdvanceAmount = 0;
+			let bgSafeBoundary = 0;
+
+			if (prevLine) {
+				const originallyHadGap = nextLine.startTime >= prevLine.endTime;
+				if (originallyHadGap) {
+					bgTargetAdvanceAmount = 1000;
+					bgSafeBoundary = prevLine.endTime;
+				} else {
+					bgTargetAdvanceAmount = 400;
+					const prevDuration = prevLine.endTime - prevLine.startTime;
+					bgSafeBoundary = prevLine.startTime + prevDuration * 0.3;
+				}
+			} else {
+				bgTargetAdvanceAmount = 1000;
+				bgSafeBoundary = 0;
+			}
+
+			const bgTargetTime = nextLine.startTime - bgTargetAdvanceAmount;
+			const bgNewStartTime = Math.max(bgSafeBoundary, bgTargetTime);
+
+			// 与主行比较，取较小值
+			nextLine.startTime = Math.min(line.startTime, bgNewStartTime);
 		}
 	}
 }
