@@ -216,6 +216,35 @@ export class LyricLineEl extends LyricLineBase {
 	}
 
 	private isEnabled = false;
+	/**
+	 * 提前展开背景行（仅视觉展开，不启动音节动画）
+	 */
+	enableEarly() {
+		this.isEnabled = true;
+		this.element.classList.add(styles.active);
+		const main = this.element.children[0] as HTMLDivElement;
+		this.updateMaskImageSync();
+		main.classList.add(styles.active);
+
+		// 音节动画暂停在起始位置，等待 enable() 时再启动
+		for (const word of this.splittedWords) {
+			for (const a of word.elementAnimations) {
+				a.currentTime = 0;
+				a.pause();
+			}
+			for (const a of word.maskAnimations) {
+				a.currentTime = 0;
+				a.pause();
+			}
+		}
+		for (const chunkInfo of this.chunkMaskInfos) {
+			for (const a of chunkInfo.maskAnimations) {
+				a.currentTime = 0;
+				a.pause();
+			}
+		}
+	}
+
 	async enable(
 		maskAnimationTime = this.lyricLine.startTime,
 		shouldPlay = true,
