@@ -239,7 +239,7 @@
 
 	/* 合并遮罩动画容器 - 包裹分音节元素 */
 	.mergedMaskContainer {
-		display: inline;
+		/* display: inline; */
 		white-space: nowrap;
 		vertical-align: bottom;
 	}
