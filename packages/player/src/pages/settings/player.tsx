@@ -2,7 +2,6 @@ import { branch, commit } from "virtual:git-metadata-plugin";
 import {
 	CanvasLyricPlayer,
 	DomLyricPlayer,
-	DomSlimLyricPlayer,
 	MeshGradientRenderer,
 	PixiRenderer,
 } from "@applemusic-like-lyrics/core";
@@ -458,13 +457,6 @@ const LyricAppearanceSettings = () => {
 			},
 			{
 				label: t(
-					"page.settings.lyricAppearance.lyricPlayerImplementation.menu.dom-slim",
-					"DOM（阉割版）",
-				),
-				value: LyricPlayerImplementation.DomSlim,
-			},
-			{
-				label: t(
 					"page.settings.lyricAppearance.lyricPlayerImplementation.menu.canvas",
 					"Canvas",
 				),
@@ -480,8 +472,6 @@ const LyricAppearanceSettings = () => {
 		if (!value || !value.lyricPlayer) return LyricPlayerImplementation.Dom;
 		if (value.lyricPlayer === DomLyricPlayer)
 			return LyricPlayerImplementation.Dom;
-		if (value.lyricPlayer === DomSlimLyricPlayer)
-			return LyricPlayerImplementation.DomSlim;
 		if (value.lyricPlayer === CanvasLyricPlayer)
 			return LyricPlayerImplementation.Canvas;
 		return LyricPlayerImplementation.Dom;
@@ -490,9 +480,6 @@ const LyricAppearanceSettings = () => {
 	const handleLyricPlayerChange = (selectedString: string) => {
 		let implementationObject: LyricPlayerImplementationObject;
 		switch (selectedString) {
-			case LyricPlayerImplementation.DomSlim:
-				implementationObject = { lyricPlayer: DomSlimLyricPlayer };
-				break;
 			case LyricPlayerImplementation.Canvas:
 				implementationObject = { lyricPlayer: CanvasLyricPlayer };
 				break;
