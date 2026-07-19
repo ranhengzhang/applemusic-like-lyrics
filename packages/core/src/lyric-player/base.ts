@@ -8,7 +8,6 @@ import {
 	type OptimizeLyricOptions,
 } from "../interfaces.ts";
 import styles from "../styles/lyric-player.module.css";
-import { eqSet } from "../utils/eq-set.ts";
 import { isCJK } from "../utils/is-cjk.ts";
 import { optimizeLyricLines } from "../utils/optimize-lyric.ts";
 import { Spring, type SpringParams } from "../utils/spring.ts";
@@ -608,107 +607,75 @@ export abstract class LyricPlayerBase
 
 		if (!this.initialLayoutFinished && !isSeek) return;
 
-		const removedHotIds = new Set<number>();
 		const removedIds = new Set<number>();
 		const addedIds = new Set<number>();
-
-		// 先检索当前已经超出时间范围的缓冲行，列入待删除集内
-		for (const lastHotId of this.hotLines) {
-			const line = this.processedLines[lastHotId];
-			if (line) {
-				if (line.isBG) continue;
-
-				// 收集所有连续的背景行
-				const bgLineIds: number[] = [];
-				let bgId = lastHotId + 1;
-				while (
-					bgId < this.processedLines.length &&
-					this.processedLines[bgId]?.isBG
-				) {
-					bgLineIds.push(bgId);
-					bgId++;
-				}
-
-				if (bgLineIds.length > 0) {
-					const nextMainLine = this.processedLines[bgId];
-					const bgLines = bgLineIds.map((id) => this.processedLines[id]);
-					const startTime = Math.min(
-						line.startTime,
-						...bgLines.map((bg) => bg.startTime),
-					);
-					const endTime = Math.min(
-						Math.max(line.endTime, nextMainLine?.startTime ?? Number.MAX_VALUE),
-						Math.max(line.endTime, ...bgLines.map((bg) => bg.endTime)),
-					);
-					if (startTime > time || endTime <= time) {
-						this.hotLines.delete(lastHotId);
-						removedHotIds.add(lastHotId);
-						for (const bgLineId of bgLineIds) {
-							this.hotLines.delete(bgLineId);
-							removedHotIds.add(bgLineId);
-							if (isSeek) {
-								this.currentLyricLineObjects[bgLineId]?.disable();
-							}
-						}
-						if (isSeek) {
-							this.currentLyricLineObjects[lastHotId]?.disable();
-						}
-					}
-				} else if (line.startTime > time || line.endTime <= time) {
-					this.hotLines.delete(lastHotId);
-					removedHotIds.add(lastHotId);
-					if (isSeek) this.currentLyricLineObjects[lastHotId]?.disable();
-				}
-			} else {
-				this.hotLines.delete(lastHotId);
-				removedHotIds.add(lastHotId);
-				if (isSeek) this.currentLyricLineObjects[lastHotId]?.disable();
-			}
-		}
-		// 第一遍：收集所有主行热行
-		const mainHotLines: number[] = [];
-		this.currentLyricLineObjects.forEach((lineObj, id) => {
-			const line = lineObj.getLine();
-			if (!line.isBG && line.startTime <= time && line.endTime > time) {
-				mainHotLines.push(id);
-			}
-		});
-
-		// 第二遍：独立处理主行和背景行
-		for (const id of mainHotLines) {
-			const lineObj = this.currentLyricLineObjects[id];
-			if (!lineObj) continue;
-			const line = lineObj.getLine();
-
-			if (isSeek) {
-				lineObj.enable(time, this.isPlaying);
-			}
-
-			if (!this.hotLines.has(id)) {
-				this.hotLines.add(id);
-				addedIds.add(id);
-
-				if (!isSeek) {
-					lineObj.enable();
-				}
-			}
-		}
-
-		// 独立处理背景行（提前1秒加入 earlyHotLines，仅视觉展开）
 		let earlyHotChanged = false;
+		const bgExpandAdvance = 1000;
+		const bgCollapseDelay = 500;
+
+		const getMainLineRange = (id: number, line: LyricLine) => {
+			const bgLines: LyricLine[] = [];
+			let bgId = id + 1;
+			while (
+				bgId < this.processedLines.length &&
+				this.processedLines[bgId]?.isBG
+			) {
+				bgLines.push(this.processedLines[bgId]);
+				bgId++;
+			}
+
+			if (bgLines.length === 0) {
+				return [line.startTime, line.endTime] as const;
+			}
+
+			return [
+				Math.min(line.startTime, ...bgLines.map((bg) => bg.startTime)),
+				Math.max(line.endTime, ...bgLines.map((bg) => bg.endTime)),
+			] as const;
+		};
+
+		for (const hotId of Array.from(this.hotLines)) {
+			const line = this.processedLines[hotId];
+			if (!line) {
+				this.hotLines.delete(hotId);
+				removedIds.add(hotId);
+				continue;
+			}
+
+			const [startTime, endTime] = line.isBG
+				? [line.startTime, line.endTime + bgCollapseDelay]
+				: getMainLineRange(hotId, line);
+
+			if (startTime > time || endTime <= time) {
+				this.hotLines.delete(hotId);
+				removedIds.add(hotId);
+			}
+		}
+
 		this.currentLyricLineObjects.forEach((lineObj, id) => {
 			const line = lineObj.getLine();
-			if (line.isBG && line.startTime - 800 <= time && line.endTime > time) {
-				// 提前1秒进入 earlyHotLines，调用 enableEarly() 仅展开不启动音节动画
-				if (!this.earlyHotLines.has(id)) {
-					this.earlyHotLines.add(id);
-					earlyHotChanged = true;
-					if (!isSeek) {
-						lineObj.enableEarly();
+			if (line.isBG) {
+				const shouldEarlyExpand =
+					line.startTime - bgExpandAdvance <= time &&
+					line.endTime + bgCollapseDelay > time;
+				const shouldBeHot =
+					line.startTime <= time && line.endTime + bgCollapseDelay > time;
+
+				if (shouldEarlyExpand) {
+					if (!this.earlyHotLines.has(id)) {
+						this.earlyHotLines.add(id);
+						earlyHotChanged = true;
+						if (isSeek) {
+							lineObj.enableEarly();
+						} else if (!shouldBeHot) {
+							lineObj.enableEarly();
+						}
 					}
+				} else if (this.earlyHotLines.delete(id)) {
+					earlyHotChanged = true;
 				}
-				// 背景行实际 startTime 到达时，加入 hotLines 并调用 enable() 启动音节动画
-				if (line.startTime <= time && !this.hotLines.has(id)) {
+
+				if (shouldBeHot && !this.hotLines.has(id)) {
 					this.hotLines.add(id);
 					addedIds.add(id);
 					if (isSeek) {
@@ -717,26 +684,48 @@ export abstract class LyricPlayerBase
 						lineObj.enable();
 					}
 				}
+				return;
+			}
+
+			const [startTime, endTime] = getMainLineRange(id, line);
+			if (startTime <= time && endTime > time && !this.hotLines.has(id)) {
+				this.hotLines.add(id);
+				addedIds.add(id);
+				if (isSeek) {
+					lineObj.enable(time, this.isPlaying);
+				} else {
+					lineObj.enable();
+				}
 			}
 		});
-		// 清理已过期的 earlyHotLines
-		for (const id of this.earlyHotLines) {
-			const line = this.processedLines[id];
-			if (line && line.endTime <= time) {
-				this.earlyHotLines.delete(id);
-				earlyHotChanged = true;
+
+		for (const bufferedId of Array.from(this.bufferedLines)) {
+			const line = this.processedLines[bufferedId];
+			if (!line) {
+				this.bufferedLines.delete(bufferedId);
+				removedIds.add(bufferedId);
+				this.currentLyricLineObjects[bufferedId]?.disable();
+				continue;
+			}
+
+			const expireTime = line.isBG ? line.endTime + bgCollapseDelay : line.endTime;
+			if (
+				expireTime <= time &&
+				!this.hotLines.has(bufferedId) &&
+				!this.earlyHotLines.has(bufferedId)
+			) {
+				this.bufferedLines.delete(bufferedId);
+				removedIds.add(bufferedId);
+				this.currentLyricLineObjects[bufferedId]?.disable();
 			}
 		}
 
-		for (const v of this.bufferedLines) {
-			if (!this.hotLines.has(v)) {
-				removedIds.add(v);
-				if (isSeek) this.currentLyricLineObjects[v]?.disable();
-			}
-		}
 		if (isSeek) {
 			this.bufferedLines.clear();
 			for (const v of this.hotLines) {
+				this.bufferedLines.add(v);
+			}
+			for (const v of this.earlyHotLines) {
 				this.bufferedLines.add(v);
 			}
 
@@ -754,90 +743,23 @@ export abstract class LyricPlayerBase
 			this.resetScroll();
 			this.calcLayout();
 		} else if (removedIds.size > 0 || addedIds.size > 0 || earlyHotChanged) {
-			if (removedIds.size === 0 && addedIds.size > 0) {
-				// 检查新加入的行与当前 hotLines 中的行是否有时间重叠
-				// 如果有重叠，将旧行也加入 bufferedLines 以保持高亮
-				const addedLineTimes = new Map<number, [number, number]>();
-				for (const v of addedIds) {
-					const line = this.processedLines[v];
-					if (line) {
-						addedLineTimes.set(v, [line.startTime, line.endTime]);
-					}
-				}
-
-				for (const v of addedIds) {
-					this.bufferedLines.add(v);
-					this.currentLyricLineObjects[v]?.enable();
-				}
-
-				// 将时间重叠的现有 hotLines 行也加入 bufferedLines
-				for (const hotId of this.hotLines) {
-					if (this.bufferedLines.has(hotId)) continue;
-					const hotLine = this.processedLines[hotId];
-					if (hotLine) {
-						for (const [addedStart, addedEnd] of addedLineTimes.values()) {
-							if (
-								hotLine.startTime < addedEnd &&
-								hotLine.endTime > addedStart
-							) {
-								this.bufferedLines.add(hotId);
-								break;
-							}
-						}
-					}
-				}
-
-				this.scrollToIndex = Math.min(...this.bufferedLines);
-				this.calcLayout();
-			} else if (addedIds.size === 0 && removedIds.size > 0) {
-				if (eqSet(removedIds, this.bufferedLines)) {
-					for (const v of this.bufferedLines) {
-						if (!this.hotLines.has(v)) {
-							this.bufferedLines.delete(v);
-							this.currentLyricLineObjects[v]?.disable();
-						}
-					}
-					this.calcLayout();
-				}
-			} else {
-				// 检查新加入的行与即将移除的行是否有时间重叠
-				// 如果有重叠，则保留旧行在 bufferedLines 中
-				const addedLineTimes = new Map<number, [number, number]>();
-				for (const v of addedIds) {
-					const line = this.processedLines[v];
-					if (line) {
-						addedLineTimes.set(v, [line.startTime, line.endTime]);
-					}
-				}
-
-				for (const v of addedIds) {
-					this.bufferedLines.add(v);
-					this.currentLyricLineObjects[v]?.enable();
-				}
-				for (const v of removedIds) {
-					// 检查是否与任何新加入的行有时间重叠
-					const removedLine = this.processedLines[v];
-					let hasOverlap = false;
-					if (removedLine) {
-						for (const [addedStart, addedEnd] of addedLineTimes.values()) {
-							if (
-								removedLine.startTime < addedEnd &&
-								removedLine.endTime > addedStart
-							) {
-								hasOverlap = true;
-								break;
-							}
-						}
-					}
-					if (!hasOverlap) {
-						this.bufferedLines.delete(v);
-						this.currentLyricLineObjects[v]?.disable();
-					}
-				}
-				if (this.bufferedLines.size > 0)
-					this.scrollToIndex = Math.min(...this.bufferedLines);
-				this.calcLayout();
+			for (const v of addedIds) {
+				this.bufferedLines.add(v);
 			}
+			for (const v of this.earlyHotLines) {
+				this.bufferedLines.add(v);
+			}
+
+			if (this.bufferedLines.size > 0) {
+				this.scrollToIndex = Math.min(...this.bufferedLines);
+			} else {
+				const foundIndex = this.processedLines.findIndex(
+					(line) => line.startTime >= time,
+				);
+				this.scrollToIndex =
+					foundIndex === -1 ? this.processedLines.length : foundIndex;
+			}
+			this.calcLayout();
 		}
 		this.lastCurrentTime = time;
 	}
@@ -951,8 +873,9 @@ export abstract class LyricPlayerBase
 			const line = this.currentLyricLineObjects[i].getLine();
 			const hasBuffered = this.bufferedLines.has(i);
 			const isEarlyHot = this.earlyHotLines.has(i);
-			const isActive =
-				hasBuffered || isEarlyHot || (i >= this.scrollToIndex && i < latestIndex);
+			const isActive = line.isBG
+				? hasBuffered || isEarlyHot
+				: hasBuffered || isEarlyHot || (i >= this.scrollToIndex && i < latestIndex);
 			if (line.isBG && bgAboveMain.has(i) && (isActive || !this.isPlaying)) {
 				activeBgAboveMain.add(i);
 			}
@@ -961,9 +884,10 @@ export abstract class LyricPlayerBase
 		this.currentLyricLineObjects.forEach((lineObj, i) => {
 			const hasBuffered = this.bufferedLines.has(i);
 			const isEarlyHot = this.earlyHotLines.has(i);
-			const isActive =
-				hasBuffered || isEarlyHot || (i >= this.scrollToIndex && i < latestIndex);
 			const line = lineObj.getLine();
+			const isActive = line.isBG
+				? hasBuffered || isEarlyHot
+				: hasBuffered || isEarlyHot || (i >= this.scrollToIndex && i < latestIndex);
 
 			const shouldShowDots = interlude && i === interlude[2] + 1;
 
