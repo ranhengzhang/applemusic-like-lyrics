@@ -5,9 +5,6 @@
 /* 标识设置了动画的元素 */
 .hasAnimation {
 	will-change: transform, mask-position, -webkit-mask-position;
-	/* 为遮罩动画预留空间，防止超出元素边界被裁切 */
-	padding: 0.5em;
-	margin: -0.5em;
 }
 
 /* 给每行歌词应用的样式 */
