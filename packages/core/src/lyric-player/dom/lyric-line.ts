@@ -1824,10 +1824,8 @@ export class LyricLineEl extends LyricLineBase {
 			const endTime = Number(wordSpan.dataset.endTime || word.endTime);
 
 			if (baseTextEl) {
-				this.applyMaskAnimation(
+				this.applyMaskAnimationToRubyBaseElement(
 					baseTextEl,
-					startTime,
-					endTime,
 					totalFadeDuration,
 					fadeWidth,
 					word,
@@ -2095,6 +2093,174 @@ export class LyricLineEl extends LyricLineBase {
 				console.warn("应用 Roman 分段动画发生错误", frames, totalFadeDuration, err);
 			}
 		});
+	}
+
+	private applyMaskAnimationToRubyBaseElement(
+		element: HTMLDivElement,
+		totalFadeDuration: number,
+		fadeWidth: number,
+		word: RealWord,
+		animationId: string,
+	) {
+		element.classList.add(styles.hasAnimation);
+
+		const main = this.element.children[0] as HTMLDivElement;
+		const baseElements = Array.from(
+			main.querySelectorAll(`.${styles.wordBody} > span > div:first-child`),
+		) as HTMLDivElement[];
+		const baseWords = this.lyricLine.words.filter((w) => w.word.trim().length > 0);
+		const currentIndex = baseElements.indexOf(element);
+		const currentWord = baseWords[currentIndex];
+
+		if (currentIndex < 0 || !currentWord || baseElements.length !== baseWords.length) {
+			this.applyMaskAnimationToElement(
+				element,
+				word.startTime,
+				word.endTime,
+				totalFadeDuration,
+				fadeWidth,
+				word,
+				animationId,
+			);
+			return;
+		}
+
+		const elementWidth = element.clientWidth || 0;
+		const elementPadding = 0;
+		const [maskImage, totalAspect] = generateFadeGradient(
+			fadeWidth / Math.max(1, elementWidth),
+		);
+		const totalAspectStr = `${totalAspect * 100}% 100%`;
+
+		if (this.lyricPlayer.supportMaskImage) {
+			element.style.maskImage = maskImage;
+			element.style.maskRepeat = "no-repeat";
+			element.style.maskOrigin = "left";
+			element.style.maskSize = totalAspectStr;
+		} else {
+			element.style.webkitMaskImage = maskImage;
+			element.style.webkitMaskRepeat = "no-repeat";
+			element.style.webkitMaskOrigin = "left";
+			element.style.webkitMaskSize = totalAspectStr;
+		}
+
+		const widths = baseElements.map((el) => el.clientWidth || 0);
+		const widthBeforeSelf =
+			widths.slice(0, currentIndex).reduce((a, b) => a + b, 0) +
+			(baseElements[0] ? fadeWidth : 0);
+		const minOffset = -(elementWidth + elementPadding * 2 + fadeWidth);
+		const clampOffset = (x: number) => Math.max(minOffset, Math.min(0, x));
+
+		let curPos = -widthBeforeSelf - elementWidth - elementPadding - fadeWidth;
+		let timeOffset = 0;
+		let lastPos = curPos;
+		let lastTime = 0;
+		const frames: Keyframe[] = [];
+
+		const pushFrame = () => {
+			const moveOffset = curPos - lastPos;
+			const time = Math.max(0, Math.min(1, timeOffset));
+			const duration = time - lastTime;
+			if (moveOffset !== 0) {
+				const d = Math.abs(duration / moveOffset);
+				if (curPos > minOffset && lastPos < minOffset) {
+					frames.push({
+						offset: lastTime + Math.abs(lastPos - minOffset) * d,
+						maskPosition: `${clampOffset(lastPos)}px 0`,
+					});
+				}
+				if (curPos > 0 && lastPos < 0) {
+					frames.push({
+						offset: lastTime + Math.abs(lastPos) * d,
+						maskPosition: `${clampOffset(curPos)}px 0`,
+					});
+				}
+			}
+			frames.push({ offset: time, maskPosition: `${clampOffset(curPos)}px 0` });
+			lastPos = curPos;
+			lastTime = time;
+		};
+
+		pushFrame();
+		let lastTimeStamp = 0;
+		baseWords.forEach((otherWord, wordIndex) => {
+			const wordStartStamp = otherWord.startTime - this.lyricLine.startTime;
+			const staticDuration = wordStartStamp - lastTimeStamp;
+			timeOffset += staticDuration / totalFadeDuration;
+			if (staticDuration > 0) pushFrame();
+			lastTimeStamp = wordStartStamp;
+
+			const rubySegments = this.getRubySegments(otherWord);
+			const rubyCharCount = rubySegments.reduce(
+				(total, ruby) => total + ruby.word.length,
+				0,
+			);
+			if (rubyCharCount > 0) {
+				const widthPerChar = widths[wordIndex] / rubyCharCount;
+				let charIndex = 0;
+				for (const ruby of rubySegments) {
+					const rubyStartTime = Number.isFinite(ruby.startTime)
+						? ruby.startTime
+						: otherWord.startTime;
+					const rubyEndTime = Number.isFinite(ruby.endTime)
+						? ruby.endTime
+						: otherWord.endTime;
+					const rubyStart = Math.max(rubyStartTime, otherWord.startTime);
+					const rubyEnd = Math.min(Math.max(rubyEndTime, rubyStart), otherWord.endTime);
+					const rubyStartStamp = rubyStart - this.lyricLine.startTime;
+					const rubyStaticDuration = rubyStartStamp - lastTimeStamp;
+					timeOffset += rubyStaticDuration / totalFadeDuration;
+					if (rubyStaticDuration > 0) pushFrame();
+					lastTimeStamp = rubyStartStamp;
+
+					const rubyDuration = Math.max(0, rubyEnd - rubyStart);
+					const perCharDuration = rubyDuration / ruby.word.length;
+					for (let rubyCharIndex = 0; rubyCharIndex < ruby.word.length; rubyCharIndex++) {
+						timeOffset += perCharDuration / totalFadeDuration;
+						curPos += widthPerChar;
+						if (wordIndex === 0 && charIndex === 0) curPos += fadeWidth * 1.5;
+						if (
+							wordIndex === baseWords.length - 1 &&
+							charIndex === rubyCharCount - 1
+						) {
+							curPos += fadeWidth * 0.5;
+						}
+						if (perCharDuration > 0) pushFrame();
+						lastTimeStamp += perCharDuration;
+						charIndex++;
+					}
+				}
+
+				const wordEndStamp = Math.max(
+					otherWord.endTime - this.lyricLine.startTime,
+					lastTimeStamp,
+				);
+				const wordTailDuration = wordEndStamp - lastTimeStamp;
+				timeOffset += wordTailDuration / totalFadeDuration;
+				if (wordTailDuration > 0) pushFrame();
+				lastTimeStamp = wordEndStamp;
+			} else {
+				const segmentDuration = Math.max(0, otherWord.endTime - otherWord.startTime);
+				timeOffset += segmentDuration / totalFadeDuration;
+				curPos += widths[wordIndex];
+				if (wordIndex === 0) curPos += fadeWidth * 1.5;
+				if (wordIndex === baseWords.length - 1) curPos += fadeWidth * 0.5;
+				if (segmentDuration > 0) pushFrame();
+				lastTimeStamp += segmentDuration;
+			}
+		});
+
+		try {
+			const ani = element.animate(frames, {
+				duration: totalFadeDuration || 1,
+				id: animationId,
+				fill: "both",
+			});
+			ani.pause();
+			word.maskAnimations.push(ani);
+		} catch (err) {
+			console.warn("应用 Ruby 原文整行渐变动画发生错误", frames, totalFadeDuration, err);
+		}
 	}
 
 	/**
